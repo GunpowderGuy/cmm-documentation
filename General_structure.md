@@ -22,14 +22,19 @@ Here's the concise list of key Cmm-related files in GHC:
 
         LLVM: compiler/GHC/CmmToLlvm.hs
 
-        WASM: (Experimental, external repos e.g., ghc-wasm-meta).
+        ## WASM: (Experimental, external repos e.g., ghc-wasm-meta).
 
+        https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/CmmToAsm/Wasm.hs
+
+        https://gitlab.haskell.org/ghc/ghc/-/tree/master/compiler/GHC/CmmToAsm/Wasm
     Cmm Syntax
 
-        compiler/GHC/Cmm/Syntax.hs: Core Cmm AST definitions.
+        ## compiler/GHC/Cmm/Syntax.hs: Core Cmm AST definitions.
+
+        https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm.hs
 
     Utilities
 
-        compiler/GHC/Cmm/Node.hs: Cmm node analysis/manipulation.
+       compiler/GHC/Cmm/Node.hs: Cmm node analysis/manipulation.
 
-        compiler/GHC/Cmm/Lint.hs: Validates Cmm invariants.
+       compiler/GHC/Cmm/Lint.hs: Validates Cmm invariants.
