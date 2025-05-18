@@ -1,3 +1,5 @@
+https://gitlab.haskell.org/ghc/ghc
+
 Here's the concise list of key Cmm-related files in GHC:
 
     Parsing
