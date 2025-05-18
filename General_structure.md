@@ -1,0 +1,33 @@
+Here's the concise list of key Cmm-related files in GHC:
+
+    Parsing
+
+        compiler/GHC/Cmm/Parser.y: Parses textual .cmm files.
+
+    STG → Cmm
+
+        compiler/GHC/StgToCmm.hs: Main driver for STG-to-Cmm translation.
+
+        compiler/GHC/StgToCmm/Expr.hs: Translates STG expressions to Cmm.
+
+    Cmm Optimizations
+
+        compiler/GHC/Cmm/Pipeline.hs: Coordinates Cmm optimization passes.
+
+    Backends
+
+        Native Code: compiler/GHC/CmmToAsm.hs
+
+        LLVM: compiler/GHC/CmmToLlvm.hs
+
+        WASM: (Experimental, external repos e.g., ghc-wasm-meta).
+
+    Cmm Syntax
+
+        compiler/GHC/Cmm/Syntax.hs: Core Cmm AST definitions.
+
+    Utilities
+
+        compiler/GHC/Cmm/Node.hs: Cmm node analysis/manipulation.
+
+        compiler/GHC/Cmm/Lint.hs: Validates Cmm invariants.
