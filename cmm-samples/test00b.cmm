@@ -1,0 +1,25 @@
+#include "Cmm.h"
+
+/*
+  hello world program, shows FFI and exit
+*/
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+INFO_TABLE_RET ( my_start, RET_SMALL, W_ info_ptr )
+    return ()
+{
+  call my_function_B(1::bits64);
+  call my_function_B(2::bits64);
+
+  return ();
+}
+
+my_function_B(bits64 i)
+{
+  foreign "C" debugBelch("hello cmm (%ld)!\n", i);
+
+  return ();
+}
+

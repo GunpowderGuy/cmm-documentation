@@ -1,0 +1,37 @@
+#include "Cmm.h"
+
+//        | 'INFO_TABLE_CONSTR' '(' NAME ',' INT ',' INT ',' INT ',' INT ',' STRING ',' STRING ')'
+//                -- ptrs, nptrs, tag, closure type, description, type
+
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+
+//        | 'INFO_TABLE_RET' '(' NAME ',' INT ',' formals0 ')'
+//                -- closure type, live regs
+
+//INFO_TABLE_RET ( my_start, 1, gcptr p )
+{
+  foreign "C" debugBelch("hello cmm!\n");
+  foreign "C" debugBelch("BLOCK_SIZE: %d BLOCKS_PER_MBLOCK: %d max allocation size: %d\n", BLOCK_SIZE, BLOCKS_PER_MBLOCK, BLOCK_SIZE*BLOCKS_PER_MBLOCK);
+  jump my_worker();
+}
+
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_worker()
+{
+
+  bits64 size, hp_before, hp_after;
+  size = 8 ;
+  hp_before = Hp;
+  HP_CHK_GEN(size);
+  hp_after = Hp;
+  foreign "C" debugBelch("hp before: %ld hp after: %ld\n", hp_before, hp_after);
+
+  jump stg_stop_thread_info();
+}
+
+/*
+  to allocate large objects >1MB (BLOCK_SIZE*BLOCKS_PER_MBLOCK)
+        ("ptr" msg) = ccall allocate(MyCapability() "ptr",
+                                     BYTES_TO_WDS(SIZEOF_MessageBlackHole));
+*/

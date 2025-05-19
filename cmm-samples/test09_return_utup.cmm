@@ -1,0 +1,33 @@
+#include "Cmm.h"
+
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+INFO_TABLE_RET ( my_start, RET_SMALL, W_ info_ptr )
+    return ()
+{
+  ( bits64 v01, bits64 v02, bits64 v03, bits64 v04
+  , bits64 v05, bits64 v06, bits64 v07, bits64 v08
+  , bits64 v09, bits64 v10, bits64 v11, bits64 v12
+  ) = call my_function_B(1::bits64);
+
+  foreign "C" debugBelch("%ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld \n"
+    , v01, v02, v03, v04
+    , v05, v06, v07, v08
+    , v09, v10, v11, v12
+    );
+
+  return ();
+}
+
+my_function_B(bits64 i)
+{
+  foreign "C" debugBelch("hello cmm (%ld)!\n", i);
+  i = i * 2;
+  return ( i*1, i*2, i*3, i*4
+         , i*5, i*6, i*7, i*8
+         , i*9, i*10, i*11, i*12
+         );
+}
+

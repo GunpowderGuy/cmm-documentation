@@ -1,0 +1,25 @@
+//INFO_TABLE_RET ( my_start, 1) // closure type: whatever - 0 = illegal
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  // run gc now
+  jump stg_gc_prim(my_fun);
+}
+
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_fun()
+{
+ bits64 i, my_sp;
+  i = 99;
+  my_sp = Sp;
+  //foreign "C" performMajorGC();
+  //jump stg_gc_prim(my_cont);
+
+  //my_cont:
+  foreign "C" debugBelch("hello cmm! %d 0x%0lX\n", i, my_sp);
+  foreign "C" printTSO(CurrentTSO);
+
+  jump stg_stop_thread_info();
+  //jump my_sp(8);
+  //return ();
+}

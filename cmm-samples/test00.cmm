@@ -1,0 +1,28 @@
+//#include <dlfcn.h>
+/*
+  hello world program, shows FFI and exit
+*/
+
+//INFO_TABLE_RET ( my_start, 1) // closure type: whatever - 0 = illegal
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("hello cmm!\n");
+  bits64 str;
+  str = "my str literal\n";
+  foreign "C" debugBelch(str+1);
+  bits64 p1, p2;
+  (p1) = foreign "C" dlsym(0, "main");
+  foreign "C" debugBelch("'main' symbol addr: %p\n", p1);
+  (p2) = foreign "C" dlsym(0, "my_start_info");
+  foreign "C" debugBelch("'my_start_info' symbol addr: %p\n", p2);
+
+  // exit program
+  jump stg_stop_thread_info();
+}
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+/*
+SymbolAddr* lookupSymbol( SymbolName* lbl )
+*/

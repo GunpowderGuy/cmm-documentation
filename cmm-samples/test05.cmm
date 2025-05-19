@@ -1,0 +1,42 @@
+#include "Cmm.h"
+
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("hello cmm!\n");
+  foreign "C" debugBelch("BLOCK_SIZE: %d BLOCKS_PER_MBLOCK: %d max allocation size: %d\n", BLOCK_SIZE, BLOCKS_PER_MBLOCK, BLOCK_SIZE*BLOCKS_PER_MBLOCK);
+  jump my_worker(1000000, 2048);
+}
+
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_worker(bits64 i, bits64 size)
+{
+  bits64 hp_before, hp_after;
+  hp_before = Hp;
+  HP_CHK_GEN(size);
+
+  // use allocated data
+  //gcptr my_data_ptr;
+  gcptr my_data_ptr;
+  my_data_ptr = Hp - size;
+  bits64 [my_data_ptr + 0] = 1;
+  bits64 [my_data_ptr + 1] = 2;
+  //return (my_data_ptr);
+
+
+  hp_after = Hp;
+  //foreign "C" debugBelch("i=%ld hp before: %ld hp after: %ld\n", i, hp_before, hp_after);
+
+  if (i == 0) {
+    foreign "C" printTSO(CurrentTSO);
+    jump stg_stop_thread_info();
+  } else {
+    jump my_worker(i - 1, size);
+  }
+}
+
+/*
+  to allocate large objects >1MB (BLOCK_SIZE*BLOCKS_PER_MBLOCK)
+        ("ptr" msg) = ccall allocate(MyCapability() "ptr",
+                                     BYTES_TO_WDS(SIZEOF_MessageBlackHole));
+*/

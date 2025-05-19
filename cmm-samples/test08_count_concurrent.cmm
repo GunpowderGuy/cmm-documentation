@@ -1,0 +1,73 @@
+#include "Cmm.h"
+
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("hello cmm!\n");
+
+  jump my_main();
+}
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+INFO_TABLE_RET ( my_main, 1, bits64 p); // this does generate my_main_info with dummy self loop asm code
+my_main()
+{
+  HP_CHK_GEN(SIZEOF_StgHeader * 4);
+  bits64 p;
+
+  p = Hp - SIZEOF_StgHeader * 4 + WDS(1);
+  SET_HDR(p, my_thread_start_info, CCCS);
+  call stg_forkzh ( p );
+
+  p = Hp - SIZEOF_StgHeader * 3 + WDS(1);
+  SET_HDR(p, my_thread_start_info, CCCS);
+  call stg_forkzh ( p );
+
+  p = Hp - SIZEOF_StgHeader * 2 + WDS(1);
+  SET_HDR(p, my_thread_start_info, CCCS);
+  call stg_forkzh ( p );
+
+  p = Hp - SIZEOF_StgHeader * 1 + WDS(1);
+  SET_HDR(p, my_thread_start_info, CCCS);
+  call stg_forkzh ( p );
+
+  // wait for child threads
+  call stg_delayzh ( 12000000::bits64 );
+  //foreign "C" sleep(12);
+
+  foreign "C" debugBelch("finished main thread, bye cmm!\n");
+
+  // exit program
+  jump stg_stop_thread_info();
+}
+
+INFO_TABLE_CONSTR ( my_thread_start, 0, 0, 1, 1, "my thread start description", "my thread start type")
+{
+  jump my_thread();
+}
+
+my_thread()
+{
+  foreign "C" debugBelch("start thread: %ld!\n", StgTSO_id(CurrentTSO));
+
+  call count(1::bits64, 10::bits64);
+
+  foreign "C" debugBelch("finish thread: %ld!\n", StgTSO_id(CurrentTSO));
+
+  // exit thread
+  jump stg_stop_thread_info();
+}
+
+count(bits64 from, bits64 to)
+{
+  if (from > to) {
+    return ();
+  } else {
+    foreign "C" debugBelch("%ld thread: %ld\n", from, StgTSO_id(CurrentTSO));
+    call stg_delayzh ( 1000000::bits64 );
+    //foreign "C" sleep(1);
+
+    jump count(from + 1, to);
+  }
+}

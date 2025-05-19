@@ -1,0 +1,45 @@
+
+
+
+
+//INFO_TABLE ( my_start, 1, 1, 1, "my info table", "my info table data")
+INFO_TABLE_RET ( my_start, 1)
+{
+  bits64 i;
+  i = 99;
+  foreign "C" debugBelch("hello cmm! %d\n", i);
+  jump my_function();
+  foreign "C" debugBelch("hello again!\n");
+  //return();
+}
+
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_function
+//INFO_TABLE ( my_function, 1, 1, 1, "my info table", "my info table data")
+{
+  foreign "C" debugBelch(" ... hello from my_function\n");
+  jump my_subroutine();
+}
+
+my_subroutine()
+{
+  foreign "C" debugBelch(" ... my_subroutine\n");
+  call my_function_B();
+
+  jump my_function();
+    //return ();
+
+
+//  push (my_subroutine) {
+//    call my_function_B();
+//  }
+  foreign "C" debugBelch(" ... my_subroutine2\n");
+
+}
+
+my_function_B()
+{
+  foreign "C" debugBelch(" ... hello from my_function_B\n");
+  return ();
+}

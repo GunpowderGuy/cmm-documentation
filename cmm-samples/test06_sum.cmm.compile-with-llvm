@@ -1,0 +1,2 @@
+set -x -e
+ghc -fllvm -pgmlo=opt-15 -pgmlc=llc-15 test06_sum.cmm -ddump-asm -ddump-llvm -keep-llvm-files -keep-tmp-files -keep-s-files -O3

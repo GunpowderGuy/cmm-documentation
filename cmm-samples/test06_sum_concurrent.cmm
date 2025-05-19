@@ -1,0 +1,45 @@
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("hello cmm!\n");
+
+  jump my_main();
+}
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_main()
+{
+  (bits64 res) = call sum(0, 1, 100000);
+  foreign "C" debugBelch("%ld\n", res);
+
+  // exit program
+  jump stg_stop_thread_info();
+}
+
+sum(bits64 acc, bits64 from, bits64 to)
+{
+  if (from > to) {
+    return (acc);
+  } else {
+    jump sum(acc + from, from + 1, to);
+  }
+}
+
+/*
+stg_forkzh ( gcptr closure )
+*/
+
+/*
+  TODO: create closure heap object
+  SET_HDR
+
+  allocate closures
+  call fork
+  yield thread or delay thread
+  exit
+
+  stg_delayzh ( W_ us_delay )
+
+
+*/

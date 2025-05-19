@@ -1,0 +1,79 @@
+#include "Cmm.h"
+
+//        | 'INFO_TABLE_CONSTR' '(' NAME ',' INT ',' INT ',' INT ',' INT ',' STRING ',' STRING ')'
+//                -- ptrs, nptrs, tag, closure type, description, type
+
+//INFO_TABLE_RET ( my_start, 1) // closure type: whatever - 0 = illegal
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("Sp: 0x%X SpLim: 0x%X size: %d\n", Sp, SpLim, Sp - SpLim);
+  foreign "C" debugBelch("Hp: 0x%X HpLim: 0x%X size: %d\n", Hp, HpLim, HpLim - Hp);
+
+  foreign "C" debugBelch("Call GC\n");
+
+  //foreign "C" printStackChunk(Sp, SpLim);
+  //foreign "C" printTSO(CurrentTSO);
+
+  jump my_worker();
+//  jump __stg_gc_enter_1(Sp + 8);
+
+  foreign "C" debugBelch("Finished GC\n");
+
+  jump stg_stop_thread_info();
+}
+
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_worker()
+{
+  foreign "C" debugBelch("my worker A\n");
+  foreign "C" debugBelch("allocated %d\n", Capability_total_allocated(MyCapability()) );
+  HP_CHK_GEN(1000000);
+    LOAD_THREAD_STATE();
+  foreign "C" debugBelch("my worker B Hp: 0x%X HpLim: 0x%X HpAlloc: %d\n", Hp, HpLim, HpAlloc);
+  foreign "C" debugBelch("allocated %d\n", Capability_total_allocated(MyCapability()) );
+
+  foreign "C" printTSO(CurrentTSO);
+
+  //return ();
+  jump stg_stop_thread_info();
+}
+
+/*
+        if (Sp - 16 < SpLim) goto c1Tf;
+        Hp = Hp + 16;
+        if (Hp > HpLim) goto c1Th;
+        ...
+    c1Th:
+        HpAlloc = 16;
+        goto c1Tf;
+    c1Tf: jump stg_gc_enter_1 ();
+
+  ( fsLit "HP_CHK_GEN",            \[bytes] ->
+                                      heapStackCheckGen Nothing (Just bytes) ),
+  ( fsLit "STK_CHK_GEN",           \[] ->
+
+*/
+
+/*
+
+extern void        printClosure    ( const StgClosure *obj );
+extern void        printStack ( StgStack *stack );
+extern void        printStackChunk ( StgPtr sp, StgPtr spLim );
+extern void        printTSO        ( StgTSO *tso );
+extern void        printMutableList( bdescr *bd );
+extern void        printStaticObjects ( StgClosure *obj );
+extern void        printWeakLists ( void );
+extern void        printLargeAndPinnedObjects ( void );
+
+*/
+
+my_worker2()
+{
+    LOAD_THREAD_STATE();
+}
+
+my_worker3()
+{
+   SAVE_THREAD_STATE();
+}

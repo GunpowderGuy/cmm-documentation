@@ -1,0 +1,28 @@
+INFO_TABLE_CONSTR ( my_start, 0, 0, 1, 1, "my start description", "my start type")
+{
+  foreign "C" debugBelch("hello cmm!\n");
+
+  jump my_main();
+}
+
+// this is how RTS finds the entry points, the "ZCMain_main_closure" is hardwired
+CLOSURE (ZCMain_main_closure, my_start);
+
+my_main()
+{
+  (bits64 res) = call count(1::bits64, 10::bits64);
+
+  // exit program
+  jump stg_stop_thread_info();
+}
+
+count(bits64 from, bits64 to)
+{
+  if (from > to) {
+    return ();
+  } else {
+    foreign "C" debugBelch("%ld\n", from);
+    call stg_delayzh ( 1000000::bits64 );
+    jump count(from + 1, to);
+  }
+}
