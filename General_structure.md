@@ -1,5 +1,21 @@
 https://gitlab.haskell.org/ghc/ghc
 
+Cmm is a polymorphic structure or set of related structures that share definitions ( the different variants have their own top level definitions but share innards ) .
+
+Said Intermediate Representation / set of IRs is meant to be used as a backend from higher level languages and compile to machine code. Much like llvm would be
+
+In practice Cmm is : 
+Compiled from STG ( a GHC IR ) 
+or
+Parsed from a textual version of cmm ( which cant represent everyhting cmm can ? ) , which can optionally implement some high level featuers
+
+And then directly compiled to machine code , to wasm via a route similar to the prior or to llvm.
+or
+Be pretty printed to a textual cmm version that is bafflingly different from the parseable one
+
+
+
+
 Here's the concise list of key Cmm-related files in GHC:
 
     Parsing
