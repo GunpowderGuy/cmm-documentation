@@ -22,6 +22,17 @@ Here's the concise list of key Cmm-related files in GHC:
 
         compiler/GHC/Cmm/Parser.y: Parses textual .cmm files.
 
+The top level parsing function
+
+parseCmmFile :: CmmParserConfig
+             -> Module
+             -> HomeUnit
+             -> FilePath
+             -> IO (Messages PsMessage, Messages PsMessage, Maybe (DCmmGroup, [InfoProvEnt]))
+parseCmmFile cmmpConfig this_mod home_unit filename =
+
+Takes textual cmm and outputs a form of serialized cmm : https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm.hs
+
     STG → Cmm
 
         compiler/GHC/StgToCmm.hs: Main driver for STG-to-Cmm translation.
