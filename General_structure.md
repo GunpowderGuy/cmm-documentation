@@ -54,14 +54,33 @@ Takes textual cmm and outputs a form of serialized cmm : https://gitlab.haskell.
         https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/CmmToAsm/Wasm.hs
 
         https://gitlab.haskell.org/ghc/ghc/-/tree/master/compiler/GHC/CmmToAsm/Wasm
+        
     Cmm Syntax
 
         ## compiler/GHC/Cmm/Syntax.hs: Core Cmm AST definitions.
 
         https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm.hs
 
+        ( The pretty printer is also defined there ) 
+
     Utilities
 
        compiler/GHC/Cmm/Node.hs: Cmm node analysis/manipulation.
-
+       
        compiler/GHC/Cmm/Lint.hs: Validates Cmm invariants.
+
+Questions? 
+
+Does every programatically generated cmm code is low level? I think high level code is only used in manually writtten RTS code 
+Is high level cmm entirely defined and implemented in parser.y?
+
+Csaba: Cmm has and add with carry primitive. Which STG code generator uses, however the textual cmm cant use it in any way
+
+Direction : 
+
+Documennt the variations of cmm and which piece of code uses which variation. For example the parser uses variation A. The pretty printer uses B,  the native code 
+generator uses C, the llvm generator uses D
+The STG to cmm uses E  
+
+Documment the variations between the parser and pretty printer 
+
