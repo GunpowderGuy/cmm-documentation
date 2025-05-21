@@ -1,1 +1,3 @@
 sudo dnf install clang-devel
+
+sudo dnf install llvm clang lld
