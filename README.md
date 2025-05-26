@@ -1,4 +1,4 @@
-# cmm-documentatioj
+# cmm-documentation
 GSoC project to documment and improve the tooling for cmm ( GHC )
 
 
