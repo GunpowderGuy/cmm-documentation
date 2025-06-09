@@ -69,3 +69,46 @@ simple_sum( bits64 b, bits64 a ){
 
    return(a + b);
 }
+
+
+sum2() {
+  // Parameters assumed to be in registers: R1 (acc), R2 (from), R3 (to)
+  entry:
+    if (R2 > R3) goto exit;    // Compare from (R2) and to (R3)
+    R1 = R1 + R2;              // acc += from
+    R2 = R2 + 1;               // from += 1
+    goto entry;                 // Tail recursion as a loop
+
+  exit:
+    call "RETURN" (R1);         // Return result in R1
+}
+
+
+simple_sum_3 { //  [R2, R1]
+  cr: // global
+  bits64 _cq;
+  _cq = R2;
+  bits64 _cp;
+  _cp = R1;
+  R1 = _cq + _cp;
+
+  // this
+  jump %ENTRY_CODE(bits64[Sp])[R1];
+  // or this
+  //jump (bits64[Sp])(R1); // [] also works instead of ()
+}
+
+
+simple_sum_4 { //  [R2, R1]
+ // cr: // global
+  bits64 _cq;
+  _cq = R2;
+  bits64 _cp;
+  _cp = R1;
+  R1 = _cq + _cp;
+
+  // this
+  jump %ENTRY_CODE(bits64[Sp])[R1];
+  // or this
+  //jump (bits64[Sp])[R1];
+}
