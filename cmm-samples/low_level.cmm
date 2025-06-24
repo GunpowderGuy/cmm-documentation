@@ -21,7 +21,6 @@ my_main()
 
 
 
-
 bar
 {
   // this is low-level cmm code, indicated by the fact that we did not
@@ -32,21 +31,8 @@ bar
            // that this works on all platforms!
 
   jump %ENTRY_CODE(Sp(0))[];
-}
-
-
-simple_sum2 {
- cr: 
-          // _cq::I64 = R2;
-          // _cp::I64 = R1;
-           //tick src<test06_sum.cmm:(72,33)-(75,1)>
-           bits64 x;
-           x = R1 + R2;
-           R1 = x;
-           //call (P64[Sp])(R1) args: 8, res: 0, upd: 8;
-          
-
-  jump %ENTRY_CODE(Sp(0))[R1];
+  //jump %ENTRY_CODE(Sp(0))[] note this is the version found in
+  // documentation, notice the two errors : https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm/Parser.y
 }
 
 
@@ -84,31 +70,16 @@ sum2() {
 }
 
 
-simple_sum_3 { //  [R2, R1]
-  cr: // global
-  bits64 _cq;
-  _cq = R2;
-  bits64 _cp;
-  _cp = R1;
-  R1 = _cq + _cp;
-
-  // this
-  jump %ENTRY_CODE(bits64[Sp])[R1];
-  // or this
-  //jump (bits64[Sp])(R1); // [] also works instead of ()
-}
-
-
 simple_sum_4 { //  [R2, R1]
- // cr: // global
-  bits64 _cq;
-  _cq = R2;
-  bits64 _cp;
-  _cp = R1;
-  R1 = _cq + _cp;
+    cr: // global
+        bits64 _cq;
+        _cq = R2;
+        bits64 _cp;
+       _cp = R1;
+       R1 = _cq + _cp;
 
-  // this
-  jump %ENTRY_CODE(bits64[Sp])[R1];
-  // or this
-  //jump (bits64[Sp])[R1];
+       // this
+       //jump %ENTRY_CODE(bits64[Sp])[R1];
+       // or this
+       jump (bits64[Sp])[R1];
 }
