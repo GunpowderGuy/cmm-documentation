@@ -1,0 +1,7 @@
+set -x -e
+
+#ghc $1 -debug -rtsopts -with-rtsopts=-S -ddump-asm -ddump-cmm -o $1.exe $2 $3 $4
+#ghc $1 -threaded -rtsopts -with-rtsopts=-S -ddump-asm -ddump-cmm -o $1.threaded.exe
+ghc $1 -debug -rtsopts -with-rtsopts=-S -ddump-cmm -o $1.exe $2 $3 $4
+
+#ghc -fllvm -pgmlo=opt-15 -pgmlc=llc-15 $1 -ddump-asm -ddump-llvm -keep-llvm-files -keep-tmp-files -keep-s-files -O3 -o $1.exe-llvm
