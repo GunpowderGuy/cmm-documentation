@@ -83,3 +83,21 @@ simple_sum_4 { //  [R2, R1]
        // or this
        jump (bits64[Sp])[R1];
 }
+
+sum22(bits64 input) {
+  // Parameters assumed to be in registers: R1 (acc), R2 (from), R3 (to)
+    bits64 internal;
+    if (input == 0) { internal = 5;}    // Compare from (R2) and to (R3)
+    else { internal = 6;}
+
+  
+}
+
+// parameter, basic blocks, control flow
+//these are ways low level ( haskell structure ) cmm differs from the Parser
+// i should write code that uses such features to :
+// compared the parsed and pretty printed versions
+// to see how they get implemented in the haskell data structure. Example : see how the pretty printed implements if, to what part of the data structure that corresponds to
+ 
+
+ // tell datalog, previous gSoc participant and GHC mailing list about this

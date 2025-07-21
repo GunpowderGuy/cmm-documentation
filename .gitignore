@@ -24,3 +24,7 @@ cabal.project.local~
 
 # Ignore all executable files
 *.exe
+
+# ignore all .o and .exe files
+*.o
+*.exe
