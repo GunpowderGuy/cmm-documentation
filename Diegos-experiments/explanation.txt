@@ -1,0 +1,21 @@
+-There are two systems named as macros
+-Normal macros are copied from anther language ( c /cpp ) 
+-Cmm macros are predetermined, which begs the question why they cant just defined normally in the parser
+[19:36]
+i mean if the parser can add more language features, why not add the features that are implemented as cmm macros
+[19:36]
+I might be missing something , but at first glance it all seems so weird
+
+The parser cannot add new features, so CNN macros are basically handled the same way as other 
+cmm language constructs. 
+The difference is the purpose of the macros. Macros are just generating the heap check or quantitative data. 
+CNN macros are just convenient, complex premots, which are uncoded. The other premots are uncoded, anyway, to machine code. 
+Anyway, from a language perspective, the CNN macros are step checks, heap checks, I don't know what else this is,
+ entry codes, which is pointer-aligned adjustment. Some complex operations that are handled by the code generator
+
+
+But the premops are handled by the code generator also. So, it's just a... The CMM macros could be premops, 
+but they are distinguished, because their purposes are different. Primeops are meant to be CPU operations.
+ CMM macros could be much more complex than a simple CPU operation, so that's why it's differentiated. 
+ But it's not user-accessible. It's hard-coded, and it's part of the CMM language.
+  C++ macros are the usual thing, just user-defined coding of macros. So, they are user-defined.

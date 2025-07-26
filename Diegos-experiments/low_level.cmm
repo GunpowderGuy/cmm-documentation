@@ -85,12 +85,21 @@ simple_sum_4 { //  [R2, R1]
 }
 
 sum22(bits64 input) {
-  // Parameters assumed to be in registers: R1 (acc), R2 (from), R3 (to)
     bits64 internal;
     if (input == 0) { internal = 5;}    // Compare from (R2) and to (R3)
     else { internal = 6;}
 
-  
+    return (internal);
+}
+
+
+ifsum(bits64 acc, bits64 from, bits64 to)
+{
+  if (from > to) {
+    return (acc);
+  } else {
+    jump sum(acc + from, from + 1, to);
+  }
 }
 
 // parameter, basic blocks, control flow
