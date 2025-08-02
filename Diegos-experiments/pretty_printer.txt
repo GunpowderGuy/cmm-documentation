@@ -1,0 +1,12 @@
+the main hook is in Cmm.hs
+
+// if stack space 8 is default value , you can omit it in the pretty printer or support somehow in the parser
+
+text comes in -> data structure . data structure -> pretty_printer
+
+//entry_code vs jump in the parser
+//call in the paser
+
+is it the same data strucutre?
+
+how to extend the parseable syntax to support the extra information . 
