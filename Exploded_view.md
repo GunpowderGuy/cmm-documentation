@@ -15,7 +15,7 @@ bar
 
 
 
-We will analyze how calls gets represented in the parser, pretty printer and the internal representation that sits in-between
+We will analyze how low level calls ( as seen in the example above, called jumps in the parseable representation ) gets represented in the parser, pretty printer and the internal representation that sits in-between
  
 -How call gets dealt with by the parser
 
