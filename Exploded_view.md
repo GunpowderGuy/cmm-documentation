@@ -1,3 +1,4 @@
+```c
 bar
 {
   // this is low-level cmm code, indicated by the fact that we did not
@@ -11,7 +12,7 @@ bar
   //jump %ENTRY_CODE(Sp(0))[] note this is the version found in
   // documentation, notice the two errors : https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm/Parser.y
 }
-
+``
 
 
 
