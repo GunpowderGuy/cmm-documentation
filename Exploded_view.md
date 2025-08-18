@@ -1,3 +1,6 @@
+The following is an example cmm procedure in parseable form. The parser transforms it into the internal cmm AST
+
+```c
 bar
 {
   // this is low-level cmm code, indicated by the fact that we did not
@@ -11,11 +14,10 @@ bar
   //jump %ENTRY_CODE(Sp(0))[] note this is the version found in
   // documentation, notice the two errors : https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/GHC/Cmm/Parser.y
 }
+``
 
-
-
-
-We will analyze how low level calls ( as seen in the example above, called jumps in the parseable representation ) gets represented in the parser, pretty printer and the internal representation that sits in-between
+We will analyze how low level calls ( as seen in the example above, called jumps in the parseable representation ) 
+get represented in the parser, AST and pretty printer
  
 -How call gets dealt with by the parser
 
@@ -65,7 +67,15 @@ call is for FFI in the parser AFAIK
 GunpowderGuy — 29/07/2025, 16:36
 i think if found a syntax for "call" not related to ffi, give me a second
 "
--In response to this, Csaba found the definition for high level cmm call. It seems its implemented entirely outside the cmm data structure
+-In response to this, Csaba found the definition for high level cmm call. It seems 
+its implemented entirely outside the cmm data structure
+
+The code above is how the parser deals with low level cmm calls. The way that 
+most closely corresponds to calls in the Cmm AST. Even then , you can see the 
+parser infers some information instead of exposing everything the AST has to offer.
+
+The parser also has a high level syntax. This deviates from the AST even more 
+and offers features closer to C. Here is how high level calls get implemented
 
 ghc-9.10.1/compiler/GHC/Cmm/Parser.v.source
 
@@ -131,6 +141,7 @@ ghc-9.10.1/compiler/GHC/CmmGraph.hs :
 
 
 "so part of high level syntax? like call with arguments or returns is considered high level? "
+The following is an explanation taken from comments in GHC source code
 
 ghc-9.10.1/compiler/GHC/Cnm/Parser.y.source [B---] 0 L:  
 71 High-level only:  
@@ -167,7 +178,9 @@ ghc-9.10.1/compiler/GHC/Cnm/Parser.y.source [B---] 0 L:
 102  correctly with an info table.  
 
 
-Using grep for figuring out the pretty printer
+Using grep for figuring out the pretty printer:
+We can also see how calls get represented in the pretty printer. Lets start by searching all
+the ocurrences of files under Cmm folder , referring to SDoc ( the pretty printing library ) 
 
 
 grep -rnw "SDoc"
@@ -220,7 +233,7 @@ Reg.hs:143:pprLocalReg :: LocalReg -> SDoc
 Reg.hs:296:{-# SPECIALIZE pprGlobalReg :: GlobalReg -> SDoc #-}
 diego@fedora:~/Documentos/ghc/compiler/GHC/Cmm$ 
 
-
+The following is the definition of calls in the cmm AST
 grep -rnw --include="Node.hs" "CmmCall"
 
   CmmCall :: {                -- A native call or tail call
