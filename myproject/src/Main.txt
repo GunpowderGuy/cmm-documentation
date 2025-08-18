@@ -1,0 +1,155 @@
+{-
+
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
+
+
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+
+import GHC
+import GHC.Cmm
+
+import GHC.Generics
+import Data.Text (Text)
+import Language.SexpGrammar
+import Language.SexpGrammar.Generic
+
+
+import GHC.Generics (Generic)
+import GHC.Cmm
+  ( GenCmmDecl(..)
+  , CmmDecl, CmmDeclSRTs --, DCmmDecl
+  , CmmStatics, CmmTopInfo, CmmGraph
+  )
+
+
+deriving instance Generic (GenCmmDecl d h g)
+
+hasNonEmptyGroup :: CmmProgram -> Bool
+hasNonEmptyGroup = any (not . null)
+
+
+--module Main (main) where
+
+data Person = Person
+  { pName    :: Text
+  , pAddress :: Text
+  , pAge     :: Maybe Int
+  } deriving (Show, Generic)
+
+instance SexpIso Person where
+  sexpIso = with $ \person ->  -- Person is isomorphic to:
+    list (                           -- a list with
+      el (sym "person") >>>          -- a symbol "person",
+      el string         >>>          -- a string, and
+      props (                        -- a property-list with
+        "address" .:  string >>>     -- a keyword :address and a string value, and
+        "age"     .:? int))  >>>     -- an optional keyword :age with int value.
+    person
+
+-}
+
+
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
+
+module CmmJSON where
+
+import GHC.Generics (Generic)
+import GHC.Cmm
+  ( GenCmmDecl(..)
+  , CmmStatics, CmmTopInfo, CmmGraph
+  , CmmGroup, CmmProgram
+  )
+import Data.Aeson
+  ( ToJSON(..), FromJSON(..)
+  , defaultOptions
+  , genericToJSON, genericToEncoding
+  , genericParseJSON
+  )
+
+-- You said Generic is already set up; if not, uncomment:
+-- deriving instance Generic (GenCmmDecl d h g)
+
+-- Generic-based aeson for the proper type.
+instance (ToJSON d, ToJSON h, ToJSON g)
+    => ToJSON (GenCmmDecl d h g) where
+  toJSON     = genericToJSON     defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+
+instance (FromJSON d, FromJSON h, FromJSON g)
+    => FromJSON (GenCmmDecl d h g) where
+  parseJSON = genericParseJSON defaultOptions
+
+-- Monomorphic convenience: these pick up the polymorphic instances above
+type CmmDecl = GenCmmDecl CmmStatics CmmTopInfo CmmGraph
+instance ToJSON   CmmDecl where
+  toJSON     = genericToJSON     defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON CmmDecl where
+  parseJSON  = genericParseJSON  defaultOptions
+
+-- CmmGroup = [CmmDecl], CmmProgram = [CmmGroup] are type synonyms for lists,
+-- so they serialize as nested lists *as long as* CmmDecl has instances.
+-- If you want explicit newtypes (useful if you later tweak encoding options):
+
+newtype CmmGroupJSON   = CmmGroupJSON   { getCmmGroup   :: CmmGroup   }
+newtype CmmProgramJSON = CmmProgramJSON { getCmmProgram :: CmmProgram }
+
+instance ToJSON   CmmGroupJSON   where
+  toJSON     = toJSON   . fmap (id :: CmmDecl -> CmmDecl) . getCmmGroup
+  toEncoding = toEncoding . fmap (id :: CmmDecl -> CmmDecl) . getCmmGroup
+instance FromJSON CmmGroupJSON   where
+  parseJSON v = CmmGroupJSON   <$> parseJSON v
+
+instance ToJSON   CmmProgramJSON where
+  toJSON     = toJSON     . fmap getCmmGroup . fmap CmmGroupJSON . getCmmProgram
+  toEncoding = toEncoding . fmap getCmmGroup . fmap CmmGroupJSON . getCmmProgram
+instance FromJSON CmmProgramJSON where
+  parseJSON v = CmmProgramJSON <$> parseJSON v
+
+
+
+{-
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleContexts #-}
+
+module CmmCBOR where
+
+import GHC.Generics (Generic)
+import GHC.Cmm
+  ( GenCmmDecl(..)
+  , CmmStatics, CmmTopInfo, CmmGraph
+  , CmmGroup, CmmProgram
+  )
+import Codec.Serialise (Serialise)
+
+-- Again, ensure Generic exists:
+-- deriving instance Generic (GenCmmDecl d h g)
+
+deriving anyclass instance (Serialise d, Serialise h, Serialise g)
+  => Serialise (GenCmmDecl d h g)
+
+-- Concrete alias
+type CmmDecl = GenCmmDecl CmmStatics CmmTopInfo CmmGraph
+deriving anyclass instance Serialise CmmDecl
+
+-- Lists already have Serialise, so groups/programs work out of the box:
+-- CmmGroup   = [CmmDecl]
+-- CmmProgram = [CmmGroup]
+-- No extra code needed unless you want wrappers for clarity:
+newtype CmmGroupCBOR   = CmmGroupCBOR   { getCmmGroupCBOR   :: CmmGroup   }
+  deriving newtype (Serialise)
+newtype CmmProgramCBOR = CmmProgramCBOR { getCmmProgramCBOR :: CmmProgram }
+  deriving newtype (Serialise)
+-}
+
+
+main :: IO ()
+main = do
+  putStrLn "hello world"
