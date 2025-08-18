@@ -67,11 +67,15 @@ call is for FFI in the parser AFAIK
 GunpowderGuy — 29/07/2025, 16:36
 i think if found a syntax for "call" not related to ffi, give me a second
 "
--In response to this, Csaba found the definition for high level cmm call. It seems its implemented entirely outside the cmm data structure
+-In response to this, Csaba found the definition for high level cmm call. It seems 
+its implemented entirely outside the cmm data structure
 
-The code above is how the parser deals with low level cmm calls. The way that most closely corresponds to calls in the Cmm AST. Even then , you can see the parser infers some information instead of exposing everything the AST has to offer.
+The code above is how the parser deals with low level cmm calls. The way that 
+most closely corresponds to calls in the Cmm AST. Even then , you can see the 
+parser infers some information instead of exposing everything the AST has to offer.
 
-The parser also has a high level syntax. This deviates from the AST even more and offers features closer to C. Here is how high level calls get implemented
+The parser also has a high level syntax. This deviates from the AST even more 
+and offers features closer to C. Here is how high level calls get implemented
 
 ghc-9.10.1/compiler/GHC/Cmm/Parser.v.source
 
@@ -175,7 +179,8 @@ ghc-9.10.1/compiler/GHC/Cnm/Parser.y.source [B---] 0 L:
 
 
 Using grep for figuring out the pretty printer:
-We can also see how calls get represented in the pretty printer. Lets start by searching all the ocurrences of files under Cmm folder , referring to SDoc ( the pretty printing library ) 
+We can also see how calls get represented in the pretty printer. Lets start by searching all
+the ocurrences of files under Cmm folder , referring to SDoc ( the pretty printing library ) 
 
 
 grep -rnw "SDoc"
