@@ -19,7 +19,7 @@ executable myproject
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  build-depends:       base >= 4.7 && < 5 , sexp-grammar, text,ghc, aeson ,bytestring, base64-bytestring
+  build-depends:       base >= 4.7 && < 5 , sexp-grammar, text,ghc, aeson ,bytestring, base64-bytestring,serialise
 
 
   ghc-options:         -Wall

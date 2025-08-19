@@ -8,8 +8,8 @@
 # A snapshot resolver dictates the compiler version and the set of packages
 # to be used for project dependencies. For example:
 #
-# snapshot: lts-23.24
-# snapshot: nightly-2025-06-15
+# snapshot: lts-23.14
+# snapshot: nightly-2025-02-15
 # snapshot: ghc-9.8.4
 #
 # The location of a snapshot can be provided as a file or url. Stack assumes
@@ -17,7 +17,8 @@
 #
 # snapshot: ./custom-snapshot.yaml
 # snapshot: https://example.com/snapshots/2024-01-01.yaml
-resolver: lts-24.4
+snapshot:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/2.yaml
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,6 +42,11 @@ packages:
 #
 # extra-deps: []
 
+extra-deps:
+  - sexp-grammar-2.3.4.2  # Or whatever the latest version is on Hackage
+
+
+
 # Override default flag values for project packages and extra-deps
 # flags: {}
 
@@ -52,7 +58,7 @@ packages:
 #
 # Require a specific version of Stack, using version ranges
 # require-stack-version: -any # Default
-# require-stack-version: ">=3.7"
+# require-stack-version: ">=3.5"
 #
 # Override the architecture used by Stack, especially useful on Windows
 # arch: i386

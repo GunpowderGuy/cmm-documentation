@@ -3,10 +3,18 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: sexp-grammar-2.3.4.2@sha256:a319f31dd4ad33b5004cf23d020e16c1316bb12f5e713be40c3a5beeba877016,2561
+    pantry-tree:
+      sha256: 366f255d8b3e691b6bea4bd5fde6a373cb697a6e518ac8c7ff31a8dfa7eadf27
+      size: 1207
+  original:
+    hackage: sexp-grammar-2.3.4.2
 snapshots:
 - completed:
-    sha256: b96cc8b203559fdd1c1617ebd71e90ea04a2db0d71b416717a2a1d1539d5d5c9
-    size: 724735
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/4.yaml
-  original: lts-24.4
+    sha256: cd28bd74375205718f1d5fa221730a9c17a203059708b1eb95f4b20d68bf82d9
+    size: 724943
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/2.yaml
+  original:
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/2.yaml
