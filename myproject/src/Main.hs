@@ -1,3 +1,5 @@
+{-
+
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -6,6 +8,9 @@
 {-# LANGUAGE DeriveGeneric      #-}
 
 {-# LANGUAGE DeriveDataTypeable #-}  -- <- required for deriving Data
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 
 import Codec.Serialise
 import qualified Data.ByteString.Lazy as BSL
@@ -39,19 +44,54 @@ import Data.Aeson
 --deriving instance Generic (GenCmmDecl CmmStatics DCmmTopInfo DCmmGraph)
 
 
-deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+--deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+--deriving instance Generic (GenCmmGraph CmmNode)
+--deriving instance Generic (GenCmmStatics False)
 --deriving instance Data    (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 
+-- Per-index Generic instances:
+--deriving instance Generic (GenCmmStatics 'False)
+--deriving instance Generic (GenCmmStatics 'True)
 
---instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 
-instance Serialise (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+--deriving instance Generic (GenCmmStatics a) 
 
+instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph) where
+   parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
+
+{-
+instance FromJSON (GenCmmGraph CmmNode)
+instance FromJSON (GenCmmStatics False)
+--instance FromJSON GlobalReg
+--instance FromJSON GHC.Cmm.CLabel.CLabel
+instance FromJSON GlobalReg where
+  parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
+  -}
+--instance FromJSON GHC.Cmm.CLabel.CLabel where
+--  parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
+  
+
+
+
+--instance Serialise (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 --instance Serialise (GenCmmGraph CmmNode)
-
 --instance Serialise (GenCmmStatics False)
 
+-}
 
+
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+
+--module CmmJSON where
+
+import GHC.Cmm --(GenCmmStatics(..))
+import Data.Aeson --(FromJSON(..))
+
+-- Always-failing dummy parser
+instance FromJSON (GenCmmStatics rawOnly) where
+  parseJSON _ = fail "dummy FromJSON for GenCmmStatics"
 
 
 
