@@ -1,103 +1,57 @@
-{-
-
-{-# LANGUAGE StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveGeneric #-}
 
-{-# LANGUAGE DeriveDataTypeable #-}  -- <- required for deriving Data
+module Main where
 
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-
-import Codec.Serialise
-import qualified Data.ByteString.Lazy as BSL
-
--- Save as: src/CmmGenericInstances.hs
--- Make sure your .cabal or package.yaml depends on the 'ghc' library.
-
-
---module CmmGenericInstances () where
-
+import Data.Aeson (FromJSON(..), Value)
 import GHC.Generics (Generic)
+
+-- Core Cmm surface (decls, graph, section, synonyms like CmmGraph/CmmStatics)
 import GHC.Cmm
 
-import Data.Data     (Data)
+-- Not re-exported by GHC.Cmm in GHC 9.10.x:
+import GHC.Cmm.CLabel (CLabel)         -- label type used by Section and CmmProc
+import GHC.Cmm.Reg    (GlobalReg)      -- register type used by CmmProc
 
-import Util
+-- Allow Aeson Generic-based instance at the top level
+deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+-- ^ Do NOT give a body here; you want the automatic (Generic) instance.
 
-import Data.Aeson
+-- ---- Dummy leaf instances to satisfy the Generic traversal ----
 
-
--- defined in line 195 Cmm.hs
---type DCmmTopInfo = GenCmmTopInfo DWrap
---type CmmTopInfo  = GenCmmTopInfo LabelMap
-
--- define same file , line 150
---type CmmGraph = GenCmmGraph CmmNode
---type DCmmGraph = GenGenCmmGraph DWrap CmmNode
-
-
--- Orphan instance for the concrete DCmm specialization of GenCmmDecl
---deriving instance Generic (GenCmmDecl CmmStatics DCmmTopInfo DCmmGraph)
-
-
---deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
---deriving instance Generic (GenCmmGraph CmmNode)
---deriving instance Generic (GenCmmStatics False)
---deriving instance Data    (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
-
--- Per-index Generic instances:
---deriving instance Generic (GenCmmStatics 'False)
---deriving instance Generic (GenCmmStatics 'True)
-
-
---deriving instance Generic (GenCmmStatics a) 
-
-instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph) where
-   parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
-
-{-
-instance FromJSON (GenCmmGraph CmmNode)
-instance FromJSON (GenCmmStatics False)
---instance FromJSON GlobalReg
---instance FromJSON GHC.Cmm.CLabel.CLabel
-instance FromJSON GlobalReg where
-  parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
-  -}
---instance FromJSON GHC.Cmm.CLabel.CLabel where
---  parseJSON _ = fail "fromJSON for GlobalReg is not implemented (dummy instance)"
-  
-
-
-
---instance Serialise (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
---instance Serialise (GenCmmGraph CmmNode)
---instance Serialise (GenCmmStatics False)
-
--}
-
-
-
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-
---module CmmJSON where
-
-import GHC.Cmm --(GenCmmStatics(..))
-import Data.Aeson --(FromJSON(..))
-
--- Always-failing dummy parser
+-- d: CmmStatics is a type synonym = GenCmmStatics 'False
+-- Provide only the polymorphic instance to avoid overlap with the synonym.
 instance FromJSON (GenCmmStatics rawOnly) where
   parseJSON _ = fail "dummy FromJSON for GenCmmStatics"
 
+-- h
+instance FromJSON CmmTopInfo where
+  parseJSON _ = fail "dummy FromJSON for CmmTopInfo"
 
+-- g
+instance FromJSON (GenCmmGraph CmmNode) where
+  parseJSON _ = fail "dummy FromJSON for GenCmmGraph"
+
+-- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
+instance FromJSON (CmmNode e x) where
+  parseJSON _ = fail "dummy FromJSON for CmmNode"
+
+-- Fields in CmmProc/CmmData:
+instance FromJSON CLabel where
+  parseJSON _ = fail "dummy FromJSON for CLabel"
+
+instance FromJSON GlobalReg where
+  parseJSON _ = fail "dummy FromJSON for GlobalReg"
+
+instance FromJSON Section where
+  parseJSON _ = fail "dummy FromJSON for Section"
+
+-- ------------------------------------------------------------
 
 main :: IO ()
 main = putStrLn "Hello, World!"
-
---that compiles, now to try to derive aeson or cborg (de)serialization , whicever you find easiest
-
 
