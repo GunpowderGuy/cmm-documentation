@@ -18,6 +18,11 @@ import GHC.Cmm
 import GHC.Cmm.CLabel (CLabel)         -- label type used by Section and CmmProc
 import GHC.Cmm.Reg    (GlobalReg)      -- register type used by CmmProc
 
+
+import GHC.Cmm.Dataflow.Graph -- curent import
+import GHC.Cmm.Dataflow.Block
+
+
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -33,8 +38,9 @@ instance FromJSON (GenCmmStatics rawOnly) where
 deriving instance Generic CmmTopInfo
 -- h
 instance FromJSON CmmTopInfo --where
---parseJSON _ = fail "dummy FromJSON for CmmTopInfo"
+--  parseJSON _ = fail "dummy FromJSON for CmmTopInfo"
 
+deriving instance Generic (GenCmmGraph CmmNode)
 -- g
 instance FromJSON (GenCmmGraph CmmNode) where
   parseJSON _ = fail "dummy FromJSON for GenCmmGraph"
@@ -60,6 +66,18 @@ instance FromJSON (GHC.Cmm.Dataflow.Label.LabelMap CmmInfoTable) where
   
 instance FromJSON CmmStackInfo where
   parseJSON _= fail "dummy"
+--
+-- needed because of instance FromJSON CmmTopInfo
+
+instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
+                            GHC.Cmm.Dataflow.Block.Block
+                            CmmNode
+                            GHC.Cmm.Dataflow.Block.C
+                            GHC.Cmm.Dataflow.Block.C) where
+  parseJSON _= fail "dummy"
+--import GHC.Cmm.Dataflow.Graph are imported because of 
+--import GHC.Cmm.Dataflow.Block  the above
+
 
 main :: IO ()
 main = putStrLn "Hello, World!"
