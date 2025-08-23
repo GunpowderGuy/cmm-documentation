@@ -42,8 +42,8 @@ instance FromJSON CmmTopInfo --where
 
 deriving instance Generic (GenCmmGraph CmmNode)
 -- g
-instance FromJSON (GenCmmGraph CmmNode) where
-  parseJSON _ = fail "dummy FromJSON for GenCmmGraph"
+instance FromJSON (GenCmmGraph CmmNode) --where
+--  parseJSON _ = fail "dummy FromJSON for GenCmmGraph"
 
 -- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
 instance FromJSON (CmmNode e x) where
@@ -77,8 +77,13 @@ instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
   parseJSON _= fail "dummy"
 --import GHC.Cmm.Dataflow.Graph are imported because of 
 --import GHC.Cmm.Dataflow.Block  the above
+---
+---
+---Needed for GenCmmGraph CmmNode
 
-
+instance FromJSON Label where
+  parseJSON _ = fail "dummy"
+--  
 main :: IO ()
 main = putStrLn "Hello, World!"
 
