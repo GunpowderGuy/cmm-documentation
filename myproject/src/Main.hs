@@ -9,6 +9,8 @@ module Main where
 import Data.Aeson (FromJSON(..), Value)
 import GHC.Generics (Generic)
 
+import GHC.Cmm.Dataflow.Label
+
 -- Core Cmm surface (decls, graph, section, synonyms like CmmGraph/CmmStatics)
 import GHC.Cmm
 
@@ -28,9 +30,10 @@ instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 instance FromJSON (GenCmmStatics rawOnly) where
   parseJSON _ = fail "dummy FromJSON for GenCmmStatics"
 
+deriving instance Generic CmmTopInfo
 -- h
-instance FromJSON CmmTopInfo where
-  parseJSON _ = fail "dummy FromJSON for CmmTopInfo"
+instance FromJSON CmmTopInfo --where
+--parseJSON _ = fail "dummy FromJSON for CmmTopInfo"
 
 -- g
 instance FromJSON (GenCmmGraph CmmNode) where
@@ -51,6 +54,12 @@ instance FromJSON Section where
   parseJSON _ = fail "dummy FromJSON for Section"
 
 -- ------------------------------------------------------------
+-- These instances are needed for CmmTopInfos
+instance FromJSON (GHC.Cmm.Dataflow.Label.LabelMap CmmInfoTable) where
+  parseJSON _= fail "dummy"
+  
+instance FromJSON CmmStackInfo where
+  parseJSON _= fail "dummy"
 
 main :: IO ()
 main = putStrLn "Hello, World!"
