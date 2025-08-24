@@ -61,9 +61,10 @@ instance FromJSON CLabel where
   parseJSON _ = fail "dummy FromJSON for CLabel"
 
 deriving instance Generic GlobalReg 
-instance FromJSON GlobalReg where
-  parseJSON _ = fail "dummy FromJSON for GlobalReg"
+instance FromJSON GlobalReg --where
+--parseJSON _ = fail "dummy FromJSON for GlobalReg"
 
+deriving instance Generic Section
 instance FromJSON Section where
   parseJSON _ = fail "dummy FromJSON for Section"
 
