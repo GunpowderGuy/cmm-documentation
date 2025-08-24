@@ -45,14 +45,22 @@ deriving instance Generic (GenCmmGraph CmmNode)
 instance FromJSON (GenCmmGraph CmmNode) --where
 --  parseJSON _ = fail "dummy FromJSON for GenCmmGraph"
 
--- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
+-- CmmNode is higher-kinded (Extensibility -> Extensibility -> *) 
+-- Seems iffy whether i can derive generic
+--deriving instance Generic (CmmNode e x) 
 instance FromJSON (CmmNode e x) where
   parseJSON _ = fail "dummy FromJSON for CmmNode"
 
 -- Fields in CmmProc/CmmData:
+--deriving instance Generic CLabel 
+--Can't make a derived instance of ‘Generic CLabel’:
+--        The data constructors of ‘CLabel’ are not all in scope
+--          so you cannot derive an instance for it
+--    • In the stand-alone deriving instance for ‘Generic CLabel’
 instance FromJSON CLabel where
   parseJSON _ = fail "dummy FromJSON for CLabel"
 
+deriving instance Generic GlobalReg 
 instance FromJSON GlobalReg where
   parseJSON _ = fail "dummy FromJSON for GlobalReg"
 
