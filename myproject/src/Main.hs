@@ -65,8 +65,8 @@ instance FromJSON GlobalReg --where
 --parseJSON _ = fail "dummy FromJSON for GlobalReg"
 
 deriving instance Generic Section
-instance FromJSON Section where
-  parseJSON _ = fail "dummy FromJSON for Section"
+instance FromJSON Section --where
+--parseJSON _ = fail "dummy FromJSON for Section"
 
 -- ------------------------------------------------------------
 -- These instances are needed for CmmTopInfos
@@ -93,6 +93,12 @@ instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
 instance FromJSON Label where
   parseJSON _ = fail "dummy"
 --  
+--
+instance FromJSON SectionType where
+  parseJSON _= fail "dummy"
+
+
+
 main :: IO ()
 main = putStrLn "Hello, World!"
 
