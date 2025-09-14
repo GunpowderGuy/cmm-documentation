@@ -137,12 +137,15 @@ instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
 ---
 ---Needed for GenCmmGraph CmmNode
 
-instance FromJSON Label where
-  parseJSON _ = fail "dummy"
---  
---
-instance FromJSON SectionType where
-  parseJSON _= fail "dummy"
+--instance FromJSON Label where
+--  parseJSON _ = fail "dummy"
+deriving instance Generic Label
+instance FromJSON Label
+
+deriving instance Generic SectionType
+instance FromJSON SectionType --where
+--instance FromJSON SectionType where
+--  parseJSON _= fail "dummy"
 
 
 
