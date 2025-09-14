@@ -48,9 +48,9 @@ import GHC.Types.CostCentre (CostCentreStack)
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
---instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
-instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph) where
-  parseJSON _ = fail "dummy FromJSON for CmmNode"
+instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+--instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph) where
+--  parseJSON _ = fail "dummy FromJSON for CmmNode"
 -- ^ Do NOT give a body here; you want the automatic (Generic) instance.
 
 -- ---- Dummy leaf instances to satisfy the Generic traversal ----
