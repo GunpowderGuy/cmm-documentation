@@ -9,7 +9,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
 
-
 module Main where
 
 import Data.Aeson (FromJSON(..), Value, genericParseJSON, defaultOptions)
@@ -43,6 +42,13 @@ import GHC.Cmm.Dataflow.Block
 
 --for manual generic implementation
 import GHC.Types.CostCentre (CostCentreStack)
+
+
+-- NECESARIO para usar mapEmpty / mapInsertList
+--import GHC.Cmm.Dataflow.Collections (IsMap(..))
+import Data.Aeson.Types (Parser)
+--import qualified Data.IntMap as IM
+import Data.Word (Word64)
 
 
 
@@ -93,14 +99,30 @@ deriving instance Generic Section
 instance FromJSON Section --where
 --parseJSON _ = fail "dummy FromJSON for Section"
 
--- ------------------------------------------------------------
+
 -- These instances are needed for CmmTopInfos
-instance FromJSON (GHC.Cmm.Dataflow.Label.LabelMap CmmInfoTable) where
-  parseJSON _= fail "dummy"
-  
-instance FromJSON CmmStackInfo where
-  parseJSON _= fail "dummy"
---
+--instance FromJSON (GHC.Cmm.Dataflow.Label.LabelMap CmmInfoTable) where
+--  parseJSON _= fail "dummy"
+
+
+-- JSON como lista de pares [(Word64, a)] -> LabelMap a
+instance FromJSON a => FromJSON (LabelMap a) where
+  parseJSON v = do
+    ps <- (parseJSON v :: Parser [(Word64, Value)])
+    pairs <- mapM
+      (\(w, val) -> do
+          x <- parseJSON val   -- x :: a (se infiere por el 'a' del instance)
+          pure (mkHooplLabel w, x))
+      ps
+    pure (mapFromList pairs)
+
+
+deriving instance Generic CmmStackInfo
+instance FromJSON CmmStackInfo 
+
+--instance FromJSON CmmStackInfo where
+--  parseJSON _= fail "dummy"
+
 -- needed because of instance FromJSON CmmTopInfo
 
 instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
