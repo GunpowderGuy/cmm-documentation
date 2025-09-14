@@ -119,7 +119,6 @@ instance FromJSON a => FromJSON (LabelMap a) where
 
 deriving instance Generic CmmStackInfo
 instance FromJSON CmmStackInfo 
-
 --instance FromJSON CmmStackInfo where
 --  parseJSON _= fail "dummy"
 
@@ -139,8 +138,12 @@ instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
 
 --instance FromJSON Label where
 --  parseJSON _ = fail "dummy"
-deriving instance Generic Label
-instance FromJSON Label
+--deriving instance Generic Label
+--instance FromJSON Label
+instance FromJSON Label where
+  parseJSON v = mkHooplLabel <$> (parseJSON v :: Parser Word64)
+
+
 
 deriving instance Generic SectionType
 instance FromJSON SectionType --where
