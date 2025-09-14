@@ -57,8 +57,8 @@ instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph) where
 
 -- d: CmmStatics is a type synonym = GenCmmStatics 'False
 -- Provide only the polymorphic instance to avoid overlap with the synonym.
-instance FromJSON (GenCmmStatics rawOnly) where
-  parseJSON _ = fail "dummy FromJSON for GenCmmStatics"
+--instance FromJSON (GenCmmStatics rawOnly) where
+--  parseJSON _ = fail "dummy FromJSON for GenCmmStatics"
 
 deriving instance Generic CmmTopInfo
 -- h
@@ -183,8 +183,27 @@ instance Generic (GenCmmStatics 'False) where
   to (M1 (R1 (M1 (a :*: b)))) =
     CmmStaticsRaw (unK1 (unM1 a)) (unK1 (unM1 b))
 
---instance FromJSON (GenCmmStatics 'True) where
---  parseJSON = genericParseJSON defaultOptions
+instance FromJSON (GenCmmStatics 'True) where
+  parseJSON = genericParseJSON defaultOptions
+
+-- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
+-- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
+instance FromJSON CmmStatic where
+  parseJSON _ = fail "dummy"
+
+
+instance FromJSON (GenCmmStatics 'False) where
+  parseJSON = genericParseJSON defaultOptions
+
+instance FromJSON CmmLit where
+  parseJSON _ = fail "dummy"
+
+instance FromJSON CostCentreStack where
+  parseJSON _ = fail "dummy"
+
+instance FromJSON CmmInfoTable where
+  parseJSON _ = fail "dummy"
+
 
 main :: IO ()
 main = putStrLn "Hello, World!"
