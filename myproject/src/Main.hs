@@ -51,6 +51,10 @@ import Data.Aeson.Types (Parser)
 import Data.Word (Word64)
 
 
+--Necesario para CmmStatic
+import qualified Data.ByteString as BS
+import qualified Data.Text.Encoding as TE
+import Data.Aeson (withText)
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -230,8 +234,14 @@ instance FromJSON (GenCmmStatics 'True) where
 -- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
 -- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
 deriving instance Generic CmmStatic
-instance FromJSON CmmStatic where
-  parseJSON _ = fail "dummy"
+instance FromJSON CmmStatic
+--instance FromJSON CmmStatic where
+--  parseJSON _ = fail "dummy"
+
+
+-- Necessary for CmmStatic instance
+instance FromJSON BS.ByteString where
+  parseJSON = withText "ByteString" (pure . TE.encodeUtf8)
 
 
 instance FromJSON (GenCmmStatics 'False) where
@@ -247,6 +257,7 @@ instance FromJSON CostCentreStack where
 
 
 deriving instance Generic CmmInfoTable
+--instance FromJSON CmmInfoTable
 instance FromJSON CmmInfoTable where
   parseJSON _ = fail "dummy"
 
