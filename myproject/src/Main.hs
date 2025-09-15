@@ -229,6 +229,7 @@ instance FromJSON (GenCmmStatics 'True) where
 
 -- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
 -- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
+deriving instance Generic CmmStatic
 instance FromJSON CmmStatic where
   parseJSON _ = fail "dummy"
 
@@ -236,12 +237,16 @@ instance FromJSON CmmStatic where
 instance FromJSON (GenCmmStatics 'False) where
   parseJSON = genericParseJSON defaultOptions
 
+deriving instance Generic CmmLit
 instance FromJSON CmmLit where
   parseJSON _ = fail "dummy"
 
+--data structures are not all in scope
 instance FromJSON CostCentreStack where
   parseJSON _ = fail "dummy"
 
+
+deriving instance Generic CmmInfoTable
 instance FromJSON CmmInfoTable where
   parseJSON _ = fail "dummy"
 
