@@ -124,6 +124,19 @@ instance FromJSON CmmStackInfo
 
 -- needed because of instance FromJSON CmmTopInfo
 
+{-
+deriving instance Generic (GHC.Cmm.Dataflow.Graph.Graph'
+                            GHC.Cmm.Dataflow.Block.Block
+                            CmmNode
+                            GHC.Cmm.Dataflow.Block.C
+                            GHC.Cmm.Dataflow.Block.C)
+instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
+                            GHC.Cmm.Dataflow.Block.Block
+                            CmmNode
+                            GHC.Cmm.Dataflow.Block.C
+                            GHC.Cmm.Dataflow.Block.C)                            
+-}
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
 instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
                             GHC.Cmm.Dataflow.Block.Block
                             CmmNode
