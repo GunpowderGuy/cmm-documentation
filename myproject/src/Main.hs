@@ -25,6 +25,7 @@ import GHC.Generics
   , SourceUnpackedness(..)   -- NoSourceUnpackedness
   , SourceStrictness(..)     -- NoSourceStrictness
   , DecidedStrictness(..)    -- DecidedLazy
+  , Generic1
   )
 
 import GHC.Cmm.Dataflow.Label
@@ -140,6 +141,69 @@ instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
                             GHC.Cmm.Dataflow.Block.C
                             GHC.Cmm.Dataflow.Block.C)                            
 -}
+
+--deriving instance Generic1 CmmNode
+
+
+parseCmmNode :: String -> CmmNode C O
+parseCmmNode _ = undefined 
+
+-- | Given the exact string "CmmEntry", produce the simplest possible
+-- CmmNode C O value. Anything else is rejected.
+parseNodeC_O :: String -> CmmNode C O
+parseNodeC_O "CmmEntry" = CmmEntry (mkHooplLabel 0) GlobalScope
+parseNodeC_O _          = error "Unsupported CmmNode C O; expected \"CmmEntry\""
+
+-- | Given the exact string "CmmBranch", produce the simplest possible
+-- CmmNode O C value. Anything else is rejected.
+--parseNodeO_C :: String -> CmmNode O C
+--parseNodeO_C "CmmBranch" = CmmBranch (mkHooplLabel 0)
+--parseNodeO_C _           = error "Unsupported CmmNode O C; expected \"CmmBranch\""
+
+-- | Given the exact string for an O→C node, produce the simplest possible value.
+--   Por ahora: CmmBranch, CmmCondBranch, CmmCall.
+parseNodeO_C :: String -> CmmNode O C
+parseNodeO_C "CmmBranch" =
+  CmmBranch (mkHooplLabel 0)
+
+parseNodeO_C "CmmCondBranch" =
+  CmmCondBranch
+    { cml_pred   = error "stub: CmmExpr predicate"
+    , cml_true   = mkHooplLabel 0
+    , cml_false  = mkHooplLabel 1
+    , cml_likely = Nothing
+    }
+
+parseNodeO_C "CmmCall" =
+  CmmCall
+    { cml_target    = error "stub: CmmExpr target"
+    , cml_cont      = Nothing
+    , cml_args_regs = []
+    , cml_args      = 0
+    , cml_ret_args  = 0
+    , cml_ret_off   = 0
+    }
+
+parseNodeO_C _ =
+  error "Unsupported CmmNode O C; expected one of {CmmBranch,CmmCondBranch,CmmCall}"
+
+
+{-parseNodeC_O :: String -> CmmNode C O
+parseNodeC_O "entry"   = CmmEntry
+-- valid CmmNode C O datacons
+parseNodeC_O "CmmEntry"        = CmmEntry
+parseNodeC_O "CmmComment"      = CmmComment
+parseNodeC_O "CmmTick"         = CmmTick
+parseNodeC_O "CmmUnwind"       = CmmUnwind
+parseNodeC_O "CmmAssign"       = CmmAssign
+parseNodeC_O "CmmStore"        = CmmStore
+parseNodeC_O "CmmUnsafeForeignCall" = CmmUnsafeForeignCall
+-- all other shape
+parseNodeC_O _ = error "Invalid shape"-}
+
+--instace FromJSON (CmmNode C O )
+--  parseJson = undefined
+
 --https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
 instance FromJSON (GHC.Cmm.Dataflow.Graph.Graph'
                             GHC.Cmm.Dataflow.Block.Block
