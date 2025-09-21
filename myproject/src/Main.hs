@@ -15,6 +15,7 @@ import Data.Aeson.Types (Parser)
 import qualified Data.ByteString as BS
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word64)
+import Data.Text
 
 -- GHC Generics (basic + detailed)
 import GHC.Generics (
@@ -67,8 +68,8 @@ instance FromJSON (GenCmmGraph CmmNode)
 -- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
 -- Seems iffy whether i can derive generic
 -- deriving instance Generic (CmmNode e x)
-instance FromJSON (CmmNode e x) where
-    parseJSON _ = fail "dummy FromJSON for CmmNode"
+--instance FromJSON (CmmNode e x) where
+--    parseJSON _ = fail "dummy FromJSON for CmmNode"
 
 -- Fields in CmmProc/CmmData:
 -- deriving instance Generic CLabel
@@ -160,6 +161,27 @@ parseNodeO_O "CmmAssign" = CmmAssign (error "stub: CmmReg") (error "stub: CmmExp
 parseNodeO_O "CmmStore" = CmmStore (error "stub: addr") (error "stub: rhs") (error "stub: AlignmentSpec")
 parseNodeO_O "CmmUnsafeForeignCall" = CmmUnsafeForeignCall (error "stub: ForeignTarget") [] []
 parseNodeO_O _ = error "Unsupported CmmNode O O"
+
+
+--import Data.Aeson (withText)
+-- | C → O nodes
+instance FromJSON (CmmNode C O) where
+  parseJSON = withText "CmmNode C O" $ \t ->
+    pure (parseNodeC_O (toString t))
+    where toString = Data.Text.unpack
+
+-- | O → C nodes
+instance FromJSON (CmmNode O C) where
+  parseJSON = withText "CmmNode O C" $ \t ->
+    pure (parseNodeO_C (toString t))
+    where toString = Data.Text.unpack
+
+-- | O → O nodes
+instance FromJSON (CmmNode O O) where
+  parseJSON = withText "CmmNode O O" $ \t ->
+    pure (parseNodeO_O (toString t))
+    where toString = Data.Text.unpack
+
 
 -- https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
 instance
