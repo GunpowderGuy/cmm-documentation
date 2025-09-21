@@ -154,14 +154,8 @@ parseNodeC_O :: String -> CmmNode C O
 parseNodeC_O "CmmEntry" = CmmEntry (mkHooplLabel 0) GlobalScope
 parseNodeC_O _          = error "Unsupported CmmNode C O; expected \"CmmEntry\""
 
--- | Given the exact string "CmmBranch", produce the simplest possible
--- CmmNode O C value. Anything else is rejected.
---parseNodeO_C :: String -> CmmNode O C
---parseNodeO_C "CmmBranch" = CmmBranch (mkHooplLabel 0)
---parseNodeO_C _           = error "Unsupported CmmNode O C; expected \"CmmBranch\""
 
--- | Given the exact string for an O→C node, produce the simplest possible value.
---   Por ahora: CmmBranch, CmmCondBranch, CmmCall.
+-- | O→C: now handles the two additional simplest cases: CmmSwitch and CmmForeignCall
 parseNodeO_C :: String -> CmmNode O C
 parseNodeO_C "CmmBranch" =
   CmmBranch (mkHooplLabel 0)
@@ -184,8 +178,27 @@ parseNodeO_C "CmmCall" =
     , cml_ret_off   = 0
     }
 
+-- added #1
+parseNodeO_C "CmmSwitch" =
+  CmmSwitch (error "stub: CmmExpr scrutinee") (error "stub: SwitchTargets")
+
+-- added #2
+parseNodeO_C "CmmForeignCall" =
+  CmmForeignCall (error "stub: target") (error "stub: results") (error "stub: args")
+                 (mkHooplLabel 0) 0 0 False
+
 parseNodeO_C _ =
-  error "Unsupported CmmNode O C; expected one of {CmmBranch,CmmCondBranch,CmmCall}"
+  error "Unsupported CmmNode O C; expected one of {CmmBranch,CmmCondBranch,CmmCall,CmmSwitch,CmmForeignCall}"
+
+-- | Open→Open nodes: return the simplest possible value for each tag.
+parseNodeO_O :: String -> CmmNode O O
+parseNodeO_O "CmmComment"            = CmmComment (error "stub: FastString")
+parseNodeO_O "CmmTick"               = CmmTick (error "stub: CmmTickish")
+parseNodeO_O "CmmUnwind"             = CmmUnwind []
+parseNodeO_O "CmmAssign"             = CmmAssign (error "stub: CmmReg") (error "stub: CmmExpr")
+parseNodeO_O "CmmStore"              = CmmStore  (error "stub: addr") (error "stub: rhs") (error "stub: AlignmentSpec")
+parseNodeO_O "CmmUnsafeForeignCall"  = CmmUnsafeForeignCall (error "stub: ForeignTarget") [] []
+parseNodeO_O _                       = error "Unsupported CmmNode O O"
 
 
 {-parseNodeC_O :: String -> CmmNode C O
