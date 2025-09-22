@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 -- for manual generic implementation
@@ -10,12 +11,12 @@
 module Main where
 
 -- Standard library imports
-import Data.Aeson (FromJSON (..), Value, defaultOptions, genericParseJSON, withText)
-import Data.Aeson.Types (Parser)
+import Data.Aeson (FromJSON (..), Value, defaultOptions, genericParseJSON, withObject, withText)
+import Data.Aeson.Types (Parser, (.:), (.:?))
 import qualified Data.ByteString as BS
+import Data.Text
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word64)
-import Data.Text
 
 -- GHC Generics (basic + detailed)
 import GHC.Generics (
@@ -42,12 +43,16 @@ import GHC.Generics (
 
 -- GHC internals: Cmm & related
 import GHC.Cmm
-import GHC.Cmm.CLabel (CLabel) -- label type used by Section and CmmProc
+import GHC.Cmm.CLabel (CLabel, ForeignLabelSource (..), mkForeignLabel) -- label type used by Section and CmmProc
 import GHC.Cmm.Dataflow.Block
 import GHC.Cmm.Dataflow.Graph
 import GHC.Cmm.Dataflow.Label
 import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
 -- Other GHC internals
+
+import GHC.Data.FastString (fsLit)
+import GHC.Types.Basic (FunctionOrData (..))
+import GHC.Unit.Types (stringToUnitId)
 
 import GHC.Types.CostCentre (CostCentreStack)
 
@@ -68,15 +73,52 @@ instance FromJSON (GenCmmGraph CmmNode)
 -- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
 -- Seems iffy whether i can derive generic
 -- deriving instance Generic (CmmNode e x)
---instance FromJSON (CmmNode e x) where
+-- instance FromJSON (CmmNode e x) where
 --    parseJSON _ = fail "dummy FromJSON for CmmNode"
 
 -- Fields in CmmProc/CmmData:
 -- deriving instance Generic CLabel
 -- Can't make a derived instance of ‘Generic CLabel’:The data constructors of
 -- ‘CLabel’ are not all in scope so you cannot derive an instance for it
+-- instance FromJSON CLabel where
+--    parseJSON _ = fail "dummy FromJSON for CLabel"
+
+-- parseFOD :: Text -> Parser FunctionOrData
+-- parseFOD "Function" = pure IsFunction
+-- parseFOD "Data"     = pure IsData
+-- parseFOD t          = fail $ "Unknown kind: " <> BS.unpack t
+
+-- main CLabel parser
 instance FromJSON CLabel where
-    parseJSON _ = fail "dummy FromJSON for CLabel"
+    parseJSON = withObject "CLabel" $ \o -> do
+        tag <- o .: "tag" :: Parser Text
+        case tag of
+            "ForeignLabel" -> do
+                name <- o .: "name"
+                bytes <- o .:? "stdcallBytes"
+                srcVal <- o .: "source"
+                src <- parseFLSrc srcVal
+                fod <- o .: "kind" >>= parseFOD
+                pure (mkForeignLabel (fsLit name) bytes src fod)
+
+            -- You can add other supported smart constructors here (mkCmmInfoLabel, mkCmmEntryLabel, etc.)
+            other -> fail $ "Unsupported CLabel tag: " <> unpack other
+
+-- parse a ForeignLabelSource
+parseFLSrc :: Value -> Parser ForeignLabelSource
+parseFLSrc = withObject "ForeignLabelSource" $ \o -> do
+    tag <- o .: "tag"
+    case (tag :: Text) of
+        "InThisPackage" -> pure ForeignLabelInThisPackage
+        "InExternalPackage" -> pure ForeignLabelInExternalPackage
+        "InPackage" -> ForeignLabelInPackage . stringToUnitId <$> o .: "unitId"
+        other -> fail $ "Unknown ForeignLabelSource: " <> unpack other
+
+parseFOD :: Text -> Parser FunctionOrData
+parseFOD t
+    | t == pack "Function" = pure IsFunction
+    | t == pack "Data" = pure IsData
+    | otherwise = fail $ "Unknown kind: " <> unpack t
 
 deriving instance Generic GlobalReg
 instance FromJSON GlobalReg
@@ -162,26 +204,28 @@ parseNodeO_O "CmmStore" = CmmStore (error "stub: addr") (error "stub: rhs") (err
 parseNodeO_O "CmmUnsafeForeignCall" = CmmUnsafeForeignCall (error "stub: ForeignTarget") [] []
 parseNodeO_O _ = error "Unsupported CmmNode O O"
 
+-- import Data.Aeson (withText)
 
---import Data.Aeson (withText)
 -- | C → O nodes
 instance FromJSON (CmmNode C O) where
-  parseJSON = withText "CmmNode C O" $ \t ->
-    pure (parseNodeC_O (toString t))
-    where toString = Data.Text.unpack
+    parseJSON = withText "CmmNode C O" $ \t ->
+        pure (parseNodeC_O (toString t))
+      where
+        toString = Data.Text.unpack
 
 -- | O → C nodes
 instance FromJSON (CmmNode O C) where
-  parseJSON = withText "CmmNode O C" $ \t ->
-    pure (parseNodeO_C (toString t))
-    where toString = Data.Text.unpack
+    parseJSON = withText "CmmNode O C" $ \t ->
+        pure (parseNodeO_C (toString t))
+      where
+        toString = Data.Text.unpack
 
 -- | O → O nodes
 instance FromJSON (CmmNode O O) where
-  parseJSON = withText "CmmNode O O" $ \t ->
-    pure (parseNodeO_O (toString t))
-    where toString = Data.Text.unpack
-
+    parseJSON = withText "CmmNode O O" $ \t ->
+        pure (parseNodeO_O (toString t))
+      where
+        toString = Data.Text.unpack
 
 -- https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
 instance
