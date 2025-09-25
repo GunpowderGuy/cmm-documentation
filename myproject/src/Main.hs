@@ -8,6 +8,8 @@
 -- for manual generic implementation
 {-# LANGUAGE TypeOperators #-}
 
+{-# LANGUAGE TypeApplications #-} -- For testing
+
 module Main where
 
 -- Standard library imports
@@ -17,6 +19,9 @@ import qualified Data.ByteString as BS
 import Data.Text
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word64)
+
+import Data.Aeson (eitherDecode)-- For testing
+import qualified Data.ByteString.Lazy.Char8 as LBS 
 
 -- GHC Generics (basic + detailed)
 import GHC.Generics (
@@ -47,7 +52,7 @@ import GHC.Cmm.CLabel (CLabel, ForeignLabelSource (..), mkForeignLabel) -- label
 import GHC.Cmm.Dataflow.Block
 import GHC.Cmm.Dataflow.Graph
 import GHC.Cmm.Dataflow.Label
-import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
+--import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
 -- Other GHC internals
 
 import GHC.Data.FastString (fsLit)
@@ -55,6 +60,9 @@ import GHC.Types.Basic (FunctionOrData (..))
 import GHC.Unit.Types (stringToUnitId)
 
 import GHC.Types.CostCentre (CostCentreStack)
+
+import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily)
+
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -71,22 +79,6 @@ deriving instance Generic (GenCmmGraph CmmNode)
 instance FromJSON (GenCmmGraph CmmNode)
 
 -- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
--- Seems iffy whether i can derive generic
--- deriving instance Generic (CmmNode e x)
--- instance FromJSON (CmmNode e x) where
---    parseJSON _ = fail "dummy FromJSON for CmmNode"
-
--- Fields in CmmProc/CmmData:
--- deriving instance Generic CLabel
--- Can't make a derived instance of ‘Generic CLabel’:The data constructors of
--- ‘CLabel’ are not all in scope so you cannot derive an instance for it
--- instance FromJSON CLabel where
---    parseJSON _ = fail "dummy FromJSON for CLabel"
-
--- parseFOD :: Text -> Parser FunctionOrData
--- parseFOD "Function" = pure IsFunction
--- parseFOD "Data"     = pure IsData
--- parseFOD t          = fail $ "Unknown kind: " <> BS.unpack t
 
 -- main CLabel parser
 instance FromJSON CLabel where
@@ -127,8 +119,6 @@ deriving instance Generic Section
 instance FromJSON Section
 
 -- These instances are needed for CmmTopInfos
--- instance FromJSON (GHC.Cmm.Dataflow.Label.LabelMap CmmInfoTable) where
---  parseJSON _= fail "dummy"
 
 -- JSON como lista de pares [(Word64, a)] -> LabelMap a
 instance (FromJSON a) => FromJSON (LabelMap a) where
@@ -148,15 +138,26 @@ instance FromJSON CmmStackInfo
 
 -- needed because of instance FromJSON CmmTopInfo
 
-parseCmmNode :: String -> CmmNode C O
-parseCmmNode _ = undefined
 
-{- | Given the exact string "CmmEntry", produce the simplest possible
-CmmNode C O value. Anything else is rejected.
--}
-parseNodeC_O :: String -> CmmNode C O
-parseNodeC_O "CmmEntry" = CmmEntry (mkHooplLabel 0) GlobalScope
-parseNodeC_O _ = error "Unsupported CmmNode C O; expected \"CmmEntry\""
+-- C → O: parse a real JSON object
+-- Accepted shape (minimum):
+--   { "tag": "CmmEntry", "label": <Word64|Label>, "scope": "GlobalScope" }
+-- - "scope" is optional; for now only "GlobalScope" is supported.
+parseNodeC_O_json :: Value -> Parser (CmmNode C O)
+parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
+  tag <- o .: "tag" :: Parser Text
+  case tag of
+    "CmmEntry" -> do
+      lbl    <- o .:  "label" :: Parser Label
+      mscope <- o .:? "scope" :: Parser (Maybe Text)
+      scope  <- case mscope of
+                  Nothing            -> pure GlobalScope
+                  Just "GlobalScope" -> pure GlobalScope
+                  Just other         -> fail ("Unsupported CmmTickScope: " <> unpack other)
+      pure (CmmEntry lbl scope)
+    other ->
+      fail ("Unsupported CmmNode C O tag: " <> unpack other)
+
 
 -- | O→C: now handles the two additional simplest cases: CmmSwitch and CmmForeignCall
 parseNodeO_C :: String -> CmmNode O C
@@ -208,10 +209,7 @@ parseNodeO_O _ = error "Unsupported CmmNode O O"
 
 -- | C → O nodes
 instance FromJSON (CmmNode C O) where
-    parseJSON = withText "CmmNode C O" $ \t ->
-        pure (parseNodeC_O (toString t))
-      where
-        toString = Data.Text.unpack
+  parseJSON = parseNodeC_O_json
 
 -- | O → C nodes
 instance FromJSON (CmmNode O C) where
@@ -241,8 +239,7 @@ instance
 
 -- import GHC.Cmm.Dataflow.Graph are imported because of
 -- import GHC.Cmm.Dataflow.Block  the above
----
----
+
 ---Needed for GenCmmGraph CmmNode
 
 instance FromJSON Label where
@@ -350,5 +347,136 @@ deriving instance Generic CmmInfoTable
 instance FromJSON CmmInfoTable where
     parseJSON _ = fail "dummy"
 
+
+deriving instance Generic CmmExpr
+instance FromJSON CmmExpr
+
+deriving instance Generic MachOp
+instance FromJSON MachOp
+
+deriving instance Generic FMASign
+instance FromJSON FMASign
+
+deriving instance Generic AlignmentSpec
+instance FromJSON AlignmentSpec
+
+deriving instance Generic Area
+instance FromJSON Area
+
+deriving instance Generic CmmReg
+instance FromJSON CmmReg
+
+deriving instance Generic GlobalRegUse
+instance FromJSON GlobalRegUse
+
+deriving instance Generic LocalReg
+instance FromJSON LocalReg
+
+-- Emulación del derivado genérico para: newtype Unique = MkUnique Word64
+-- Se decodifica exactamente como Word64 y luego se construye el Unique.
+instance FromJSON GHC.Types.Unique.Unique where
+  parseJSON v =
+    (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
+
+
+-- reemplaza tu main por este
 main :: IO ()
-main = putStrLn "Hello, World!"
+main = do
+  putStrLn "== CmmNode C O JSON tests =="
+
+  -- 1) OK: objeto válido
+  let ok = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"GlobalScope\"}"
+  test "OK (object with tag/label/scope)" ok
+
+  -- 2) OK sin scope (usa GlobalScope por defecto)
+  let okNoScope = "{\"tag\":\"CmmEntry\",\"label\":1}"
+  test "OK (object without scope → defaults to GlobalScope)" okNoScope
+
+  -- 3) Falla: scope no soportado
+  let badScope = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"LocalScope\"}"
+  test "FAIL (unsupported scope)" badScope
+
+  -- 4) Falla: tag no soportado
+  let badTag = "{\"tag\":\"NotEntry\",\"label\":0}"
+  test "FAIL (unsupported tag)" badTag
+
+  -- 5) Falla: falta label
+  let missingLabel = "{\"tag\":\"CmmEntry\"}"
+  test "FAIL (missing label)" missingLabel
+
+  -- 6) Falla: string “legacy” (ya no aceptamos Text puro)
+  let legacy = "\"CmmEntry\""
+  test "FAIL (string form no longer accepted)" legacy
+
+  putStrLn "== Done =="
+
+  where
+    test msg js = do
+      putStrLn $ "→ " <> msg
+      case eitherDecode @(CmmNode C O) (LBS.pack js) of
+        Right _ -> putStrLn "   decoded: OK"
+        Left  e -> putStrLn $ "   decoded: ERROR → " <> e
+
+
+-- ===== FromJSON for CmmType (emulating genericParseJSON defaultOptions) =====
+-- JSON shape expected (TaggedObject):
+--   { "tag":"CmmType", "contents":[ <CmmCat>, <Width> ] }
+--   CmmCat:
+--     { "tag":"BitsCat" }
+--     { "tag":"FloatCat" }
+--     { "tag":"GcPtrCat" }
+--     { "tag":"VecCat", "contents":[ <Length :: Int>, <CmmCat> ] }
+--   Width:
+--     { "tag":"W8" | "W16" | "W32" | "W64" | "W128" | "W256" | "W512" }
+
+-- Open mirror of the internal category so we can rebuild using public ctors
+data CmmCatOpen
+  = OGcPtr
+  | OBits
+  | OFloat
+  | OVec Int CmmCatOpen
+  deriving (Show, Eq)
+
+instance FromJSON CmmCatOpen where
+  parseJSON = withObject "CmmCat" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "GcPtrCat" -> pure OGcPtr
+      "BitsCat"  -> pure OBits
+      "FloatCat" -> pure OFloat
+      "VecCat"   -> do
+        cs <- o .: "contents"
+        (n, sub) <- parseJSON cs :: Parser (Int, CmmCatOpen)
+        pure (OVec n sub)
+      other -> fail ("Unknown CmmCat tag: " <> unpack other)
+
+instance FromJSON Width where
+  parseJSON = withObject "Width" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "W8"   -> pure W8
+      "W16"  -> pure W16
+      "W32"  -> pure W32
+      "W64"  -> pure W64
+      "W128" -> pure W128
+      "W256" -> pure W256
+      "W512" -> pure W512
+      other  -> fail ("Unknown Width tag: " <> unpack other)
+
+instance FromJSON CmmType where
+  parseJSON = withObject "CmmType" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmType" -> do
+        cs <- o .: "contents"
+        (cat, w) <- parseJSON cs :: Parser (CmmCatOpen, Width)
+        build cat w
+      other -> fail ("Expected tag CmmType, got: " <> unpack other)
+    where
+      build :: CmmCatOpen -> Width -> Parser CmmType
+      build OBits      w = pure (cmmBits  w)
+      build OFloat     w = pure (cmmFloat w)
+      build (OVec n c) w = vec n <$> build c w
+      build OGcPtr     _ =
+        -- Requires a Platform to construct (gcWord). Provide a Platform-aware parser if needed.
+        fail "GcPtrCat requires a Platform (use a Platform-aware parser to call gcWord)."
