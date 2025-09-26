@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 {-# LANGUAGE TypeApplications #-} -- For testing
+{-# LANGUAGE InstanceSigs #-}
 
 module Main where
 
@@ -62,6 +63,37 @@ import GHC.Unit.Types (stringToUnitId)
 import GHC.Types.CostCentre (CostCentreStack)
 
 import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily)
+
+--import GHC.Runtime.Heap.Layout (SMRep)
+import GHC.Runtime.Heap.Layout (SMRep(..), ArgDescr(..))
+import qualified Data.Semigroup as GHC.Runtime.Heap.Layout
+
+
+--import GHC.Types.Var (Var(..))
+import GHC.Types.Var (Var(), mkLocalVar, mkGlobalVar, mkExportedLocalVar, mkCoVar)
+
+import GHC.Types.Id.Info (IdDetails, IdInfo, vanillaIdInfo)
+import GHC.Types.Name (Name)
+import GHC.Core.TyCo.Rep (Type, Mult)
+
+import GHC.Types.Id.Info (IdDetails(..))
+import qualified GHC.Types.Unique.DFM as GHC.Types.FM
+import qualified GHC.Plugins as GHC.Types.FM
+
+import GHC.Tc.Utils.TcType (ConcreteTvOrigin(..))
+
+
+import GHC.Types.Name
+  ( Name
+  , mkInternalName, mkExternalName, mkSystemName, mkSystemNameAt
+  , nameOccName, nameUnique, setNameLoc
+  )
+
+-- Piezas requeridas por esos ctors
+import GHC.Types.Name.Occurrence (OccName, mkOccName, mkVarOcc, mkTcOcc)
+import GHC.Unit.Module           (Module)
+import GHC.Types.SrcLoc          (SrcSpan, noSrcSpan)
+import GHC.Types.Unique          (Unique)
 
 
 -- Allow Aeson Generic-based instance at the top level
@@ -341,11 +373,96 @@ instance FromJSON CmmLit where
 
 -- data structures are not all in scope
 instance FromJSON CostCentreStack where
+    parseJSON :: Value -> Parser CostCentreStack
     parseJSON _ = fail "dummy"
 
 deriving instance Generic CmmInfoTable
-instance FromJSON CmmInfoTable where
-    parseJSON _ = fail "dummy"
+--instance FromJSON CmmInfoTable where
+ -- parseJSON _ = fail "dummy"
+
+instance FromJSON CmmInfoTable
+
+--instance FromJSON GHC.Types.Var.Var where 
+--    parseJSON _ = fail "dummy"
+
+
+instance FromJSON GHC.Types.Var.Var where
+  parseJSON = withObject "Var" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- LocalVar: (IdDetails, Name, Mult, Type, Maybe IdInfo)
+      "LocalVar" -> do
+        (details, name, mult, ty, minfo)
+          <- o .: "contents"
+             :: Parser ( GHC.Types.Id.Info.IdDetails
+                       , GHC.Types.Name.Name
+                       , GHC.Core.TyCo.Rep.Mult
+                       , GHC.Core.TyCo.Rep.Type
+                       , Maybe GHC.Types.Id.Info.IdInfo )
+        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
+        pure (GHC.Types.Var.mkLocalVar details name mult ty info)
+
+      -- GlobalVar: (IdDetails, Name, Type, Maybe IdInfo)
+      "GlobalVar" -> do
+        (details, name, ty, minfo)
+          <- o .: "contents"
+             :: Parser ( GHC.Types.Id.Info.IdDetails
+                       , GHC.Types.Name.Name
+                       , GHC.Core.TyCo.Rep.Type
+                       , Maybe GHC.Types.Id.Info.IdInfo )
+        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
+        pure (GHC.Types.Var.mkGlobalVar details name ty info)
+
+      -- ExportedLocalVar: (IdDetails, Name, Type, Maybe IdInfo)
+      "ExportedLocalVar" -> do
+        (details, name, ty, minfo)
+          <- o .: "contents"
+             :: Parser ( GHC.Types.Id.Info.IdDetails
+                       , GHC.Types.Name.Name
+                       , GHC.Core.TyCo.Rep.Type
+                       , Maybe GHC.Types.Id.Info.IdInfo )
+        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
+        pure (GHC.Types.Var.mkExportedLocalVar details name ty info)
+
+      -- CoVar: (Name, Type)
+      "CoVar" -> do
+        (name, ty)
+          <- o .: "contents"
+             :: Parser ( GHC.Types.Name.Name
+                       , GHC.Core.TyCo.Rep.Type )
+        pure (GHC.Types.Var.mkCoVar name ty)
+
+      other ->
+        fail ("FromJSON Var: unknown tag " <> unpack other)
+
+deriving instance Generic IdDetails
+instance FromJSON IdDetails
+
+--deriving instance Generic (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin )
+
+
+instance FromJSON ( GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin ) where
+  parseJSON =
+    fail "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+
+instance FromJSON GHC.Types.Name.Name where
+  parseJSON =
+    fail "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+
+deriving instance Generic ProfilingInfo
+instance FromJSON ProfilingInfo
+
+
+deriving instance Generic GHC.Runtime.Heap.Layout.SMRep
+instance FromJSON GHC.Runtime.Heap.Layout.SMRep
+
+
+deriving instance Generic ClosureTypeInfo
+instance FromJSON ClosureTypeInfo
+
+
+deriving instance Generic GHC.Runtime.Heap.Layout.ArgDescr
+instance FromJSON GHC.Runtime.Heap.Layout.ArgDescr
 
 
 deriving instance Generic CmmExpr
@@ -446,7 +563,7 @@ instance FromJSON CmmCatOpen where
       "FloatCat" -> pure OFloat
       "VecCat"   -> do
         cs <- o .: "contents"
-        (n, sub) <- parseJSON cs :: Parser (Int, CmmCatOpen)
+        (n, sub) <- Data.Aeson.parseJSON cs :: Parser (Int, CmmCatOpen)
         pure (OVec n sub)
       other -> fail ("Unknown CmmCat tag: " <> unpack other)
 
