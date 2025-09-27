@@ -2,14 +2,14 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
--- For testing
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 -- for manual generic implementation
 {-# LANGUAGE TypeOperators #-}
+
+{-# LANGUAGE TypeApplications #-} -- For testing
+{-# LANGUAGE InstanceSigs #-}
 
 module Main where
 
@@ -21,8 +21,8 @@ import Data.Text
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word64)
 
-import Data.Aeson (eitherDecode) -- For testing
-import qualified Data.ByteString.Lazy.Char8 as LBS
+import Data.Aeson (eitherDecode)-- For testing
+import qualified Data.ByteString.Lazy.Char8 as LBS 
 
 -- GHC Generics (basic + detailed)
 import GHC.Generics (
@@ -53,8 +53,7 @@ import GHC.Cmm.CLabel (CLabel, ForeignLabelSource (..), mkForeignLabel) -- label
 import GHC.Cmm.Dataflow.Block
 import GHC.Cmm.Dataflow.Graph
 import GHC.Cmm.Dataflow.Label
-
--- import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
+--import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
 -- Other GHC internals
 
 import GHC.Data.FastString (fsLit)
@@ -65,47 +64,47 @@ import GHC.Types.CostCentre (CostCentreStack)
 
 import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily)
 
--- import GHC.Runtime.Heap.Layout (SMRep)
-
+--import GHC.Runtime.Heap.Layout (SMRep)
+import GHC.Runtime.Heap.Layout (SMRep(..), ArgDescr(..))
 import qualified Data.Semigroup as GHC.Runtime.Heap.Layout
-import GHC.Runtime.Heap.Layout (ArgDescr (..), SMRep (..))
 
--- import GHC.Types.Var (Var(..))
-import GHC.Types.Var (Var (), mkCoVar, mkExportedLocalVar, mkGlobalVar, mkLocalVar)
 
-import GHC.Core.TyCo.Rep (Mult, Type)
+--import GHC.Types.Var (Var(..))
+import GHC.Types.Var (Var(), mkLocalVar, mkGlobalVar, mkExportedLocalVar, mkCoVar)
+
 import GHC.Types.Id.Info (IdDetails, IdInfo, vanillaIdInfo)
 import GHC.Types.Name (Name)
+import GHC.Core.TyCo.Rep (Type, Mult)
 
-import qualified GHC.Plugins as GHC.Types.FM
-import GHC.Types.Id.Info (IdDetails (..))
+import GHC.Types.Id.Info (IdDetails(..))
 import qualified GHC.Types.Unique.DFM as GHC.Types.FM
+import qualified GHC.Plugins as GHC.Types.FM
 
-import GHC.Tc.Utils.TcType (ConcreteTvOrigin (..))
+import GHC.Tc.Utils.TcType (ConcreteTvOrigin(..))
 
-import Data.ByteString.Short (ShortByteString (..))
+import Data.ByteString.Short (ShortByteString(..))
 
-import GHC.Types.Name (
-    Name,
-    mkExternalName,
-    mkInternalName,
-    mkSystemName,
-    mkSystemNameAt,
-    nameOccName,
-    nameUnique,
-    setNameLoc,
- )
+
+
+import GHC.Types.Name
+  ( Name
+  , mkInternalName, mkExternalName, mkSystemName, mkSystemNameAt
+  , nameOccName, nameUnique, setNameLoc
+  )
 
 -- Piezas requeridas por esos ctors
-import GHC.Types.Name.Occurrence (OccName, mkOccName, mkTcOcc, mkVarOcc)
-import GHC.Types.SrcLoc (SrcSpan, noSrcSpan)
-import GHC.Types.Unique (Unique)
-import GHC.Unit.Module (Module)
+import GHC.Types.Name.Occurrence (OccName, mkOccName, mkVarOcc, mkTcOcc)
+import GHC.Unit.Module           (Module)
+import GHC.Types.SrcLoc          (SrcSpan, noSrcSpan)
+import GHC.Types.Unique          (Unique)
 
-import GHC.Types.ForeignCall (CCallSpec (..), CCallTarget (..), ForeignCall (..))
-import qualified GHC.Types.ForeignCall as GHC.Types -- sus
 
--- import Data.Array.Byte (ByteArray(..))
+import GHC.Types.ForeignCall ( ForeignCall(..),CCallSpec(..)) 
+import GHC.Types.ForeignCall ( CCallTarget(..) )
+import qualified GHC.Types.ForeignCall as GHC.Types --sus
+
+
+--import Data.Array.Byte (ByteArray(..))
 
 -- Deja este para el TIPO ByteArray (sigue siendo el mismo tipo)
 import Data.Array.Byte (ByteArray)
@@ -116,11 +115,13 @@ import Data.Array.Byte (ByteArray)
 --   , writeByteArray
 --   , unsafeFreezeByteArray
 
-import GHC.Core.Class (Class (..))
-import GHC.Core.ConLike (ConLike (..))
-import GHC.Core.PatSyn (PatSyn (..))
+import GHC.Core.ConLike (ConLike(..))
+import GHC.Core.PatSyn (PatSyn(..))
+import GHC.Core.Class (Class(..))
 
-import GHC.Builtin.PrimOps (PrimOp (..))
+import GHC.Builtin.PrimOps (PrimOp(..)) 
+
+
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -196,24 +197,26 @@ instance FromJSON CmmStackInfo
 
 -- needed because of instance FromJSON CmmTopInfo
 
+
 -- C → O: parse a real JSON object
 -- Accepted shape (minimum):
 --   { "tag": "CmmEntry", "label": <Word64|Label>, "scope": "GlobalScope" }
 -- - "scope" is optional; for now only "GlobalScope" is supported.
 parseNodeC_O_json :: Value -> Parser (CmmNode C O)
 parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
-    tag <- o .: "tag" :: Parser Text
-    case tag of
-        "CmmEntry" -> do
-            lbl <- o .: "label" :: Parser Label
-            mscope <- o .:? "scope" :: Parser (Maybe Text)
-            scope <- case mscope of
-                Nothing -> pure GlobalScope
-                Just "GlobalScope" -> pure GlobalScope
-                Just other -> fail ("Unsupported CmmTickScope: " <> unpack other)
-            pure (CmmEntry lbl scope)
-        other ->
-            fail ("Unsupported CmmNode C O tag: " <> unpack other)
+  tag <- o .: "tag" :: Parser Text
+  case tag of
+    "CmmEntry" -> do
+      lbl    <- o .:  "label" :: Parser Label
+      mscope <- o .:? "scope" :: Parser (Maybe Text)
+      scope  <- case mscope of
+                  Nothing            -> pure GlobalScope
+                  Just "GlobalScope" -> pure GlobalScope
+                  Just other         -> fail ("Unsupported CmmTickScope: " <> unpack other)
+      pure (CmmEntry lbl scope)
+    other ->
+      fail ("Unsupported CmmNode C O tag: " <> unpack other)
+
 
 -- | O→C: now handles the two additional simplest cases: CmmSwitch and CmmForeignCall
 parseNodeO_C :: String -> CmmNode O C
@@ -265,7 +268,7 @@ parseNodeO_O _ = error "Unsupported CmmNode O O"
 
 -- | C → O nodes
 instance FromJSON (CmmNode C O) where
-    parseJSON = parseNodeC_O_json
+  parseJSON = parseNodeC_O_json
 
 -- | O → C nodes
 instance FromJSON (CmmNode O C) where
@@ -401,13 +404,12 @@ instance FromJSON CostCentreStack where
     parseJSON _ = fail "dummy"
 
 deriving instance Generic CmmInfoTable
-
--- instance FromJSON CmmInfoTable where
--- parseJSON _ = fail "dummy"
+--instance FromJSON CmmInfoTable where
+ -- parseJSON _ = fail "dummy"
 
 instance FromJSON CmmInfoTable
 
-instance FromJSON GHC.Types.Var.Var where
+instance FromJSON GHC.Types.Var.Var where 
     parseJSON _ = fail "dummy"
 
 {-
@@ -464,79 +466,82 @@ instance FromJSON GHC.Types.Var.Var where
 deriving instance Generic IdDetails
 instance FromJSON IdDetails
 
+
 instance FromJSON GHC.Types.FM.CbvMark where
-    parseJSON =
-        error "falla"
+  parseJSON =
+    error "falla"
 
 instance FromJSON GHC.Types.FM.TickBoxOp where
-    parseJSON =
-        error "falla"
+  parseJSON =
+    error "falla"
+
 
 instance FromJSON GHC.Builtin.PrimOps.PrimOp where
-    parseJSON =
-        error "falla"
+  parseJSON = 
+    error "falla"
+
 
 -- check if i can import data constructor
 instance FromJSON GHC.Core.Class.Class where
-    parseJSON =
-        error "falla"
+  parseJSON = 
+    error "falla"
+
 
 deriving instance Generic GHC.Core.ConLike.ConLike
+--instance FromJSON GHC.Core.ConLike.ConLike  
+instance FromJSON GHC.Core.ConLike.ConLike  where
+  parseJSON = 
+    error "falla"
 
--- instance FromJSON GHC.Core.ConLike.ConLike
-instance FromJSON GHC.Core.ConLike.ConLike where
-    parseJSON =
-        error "falla"
-
--- seems this type does not export data constructor, must check, but did import type itself
--- instance FromJSON PatSyn wnere
+--seems this type does not export data constructor, must check, but did import type itself
+--instance FromJSON PatSyn wnere
 --  parseJSON =
 --    error "falla"
 
 instance FromJSON GHC.Types.FM.FieldLabel where
-    parseJSON :: Value -> Parser GHC.Types.FM.FieldLabel
-    parseJSON =
-        error "falla pues"
+  parseJSON :: Value -> Parser GHC.Types.FM.FieldLabel
+  parseJSON = 
+    error "falla pues"
 
 instance FromJSON GHC.Types.FM.RecSelParent where
-    parseJSON =
-        error "falla pues"
+  parseJSON = 
+    error "falla pues"
 
--- deriving instance Generic GHC.Types.FM.DataCon
+--deriving instance Generic GHC.Types.FM.DataCon
 
 instance FromJSON GHC.Types.FM.DataCon where
-    parseJSON :: Value -> Parser GHC.Types.FM.DataCon
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+  parseJSON :: Value -> Parser GHC.Types.FM.DataCon
+  parseJSON =
+    error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
 instance FromJSON GHC.Types.ForeignCall.ForeignCall
 
 deriving instance Generic GHC.Types.ForeignCall.CCallSpec
-
--- instance FromJSON GHC.Types.ForeignCall.CCallSpec
+--instance FromJSON GHC.Types.ForeignCall.CCallSpec
 
 instance FromJSON GHC.Types.ForeignCall.CCallSpec where
-    parseJSON =
-        error "Falla pues"
+  parseJSON =
+    error "Falla pues"
+
 
 deriving instance Generic GHC.Types.ForeignCall.CCallTarget
-
--- instance FromJSON GHC.Types.CCallTarget
+--instance FromJSON GHC.Types.CCallTarget
 
 instance FromJSON GHC.Types.CCallTarget where
-    parseJSON =
-        error "Falla pues"
+  parseJSON =
+    error "Falla pues"
 
 deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 
-instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId) where
-    parseJSON =
-        error "falla pues"
+instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId) where 
+  parseJSON =
+    error "falla pues"
 
-deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
+deriving instance Generic ( GHC.Types.FM.Definite GHC.Types.FM.UnitId )
+instance FromJSON ( GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 
 deriving instance Generic GHC.Types.FM.UnitId
 instance FromJSON GHC.Types.FM.UnitId
@@ -544,57 +549,65 @@ instance FromJSON GHC.Types.FM.UnitId
 deriving instance Generic GHC.Types.FM.FastString
 instance FromJSON GHC.Types.FM.FastString
 
--- instance FromJSON GHC.Types.FM.RecSelParent where
---  parseJSON =
+
+--instance FromJSON GHC.Types.FM.RecSelParent where
+--  parseJSON = 
 --    fail "falla pues"
 
 instance FromJSON GHC.Types.FM.FastZString where
-    parseJSON =
-        error "falla pues"
+  parseJSON =
+   error "falla pues"
 
--- deriving instance Generic Data.ByteString.Short.ShortByteString
+--deriving instance Generic Data.ByteString.Short.ShortByteString
 instance FromJSON Data.ByteString.Short.ShortByteString
 
--- deriving instance Generic Data.Array.Byte.ByteArray no se puede generar por ser tipo primigeneo
+--deriving instance Generic Data.Array.Byte.ByteArray no se puede generar por ser tipo primigeneo
+
 
 -- Instancia dummy: JSON → [Word8] → ShortByteString → ByteArray interno
--- instance FromJSON ByteArray where
--- parseJSON v = do
---  ws <- parseJSON v :: Parser BS.ByteString  -- Aeson ya sabe convertir de String→ByteString
--- convertimos a ShortByteString y sacamos el ByteArray interno
---  let sbs = toShort ws
--- Ojo: esto usa el campo interno de ShortByteString (que es ByteArray)
---     arr = case sbs of SBS ba -> ba
--- pure arr
+--instance FromJSON ByteArray where
+ -- parseJSON v = do
+  --  ws <- parseJSON v :: Parser BS.ByteString  -- Aeson ya sabe convertir de String→ByteString
+    -- convertimos a ShortByteString y sacamos el ByteArray interno
+  --  let sbs = toShort ws
+        -- Ojo: esto usa el campo interno de ShortByteString (que es ByteArray)
+   --     arr = case sbs of SBS ba -> ba
+   -- pure arr
+
+
 
 instance FromJSON ByteArray where
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+  parseJSON =
+    error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
 
--- deriving instance Generic (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin )
--- UniqFM does not export constructor
--- https://hackage-content.haskell.org/package/ghc-9.12.2/docs/GHC-Types-Unique-FM.html
+--deriving instance Generic (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin )
+--UniqFM does not export constructor
+--https://hackage-content.haskell.org/package/ghc-9.12.2/docs/GHC-Types-Unique-FM.html
 
-instance FromJSON (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin) where
-    parseJSON :: Value -> Parser (GHC.Types.FM.UniqFM Name ConcreteTvOrigin)
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+instance FromJSON ( GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin ) where
+  parseJSON :: Value -> Parser (GHC.Types.FM.UniqFM Name ConcreteTvOrigin)
+  parseJSON =
+    error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
 
 instance FromJSON GHC.Types.Name.Name where
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+  parseJSON =
+    error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
 
 deriving instance Generic ProfilingInfo
 instance FromJSON ProfilingInfo
 
+
 deriving instance Generic GHC.Runtime.Heap.Layout.SMRep
 instance FromJSON GHC.Runtime.Heap.Layout.SMRep
+
 
 deriving instance Generic ClosureTypeInfo
 instance FromJSON ClosureTypeInfo
 
+
 deriving instance Generic GHC.Runtime.Heap.Layout.ArgDescr
 instance FromJSON GHC.Runtime.Heap.Layout.ArgDescr
+
 
 deriving instance Generic CmmExpr
 instance FromJSON CmmExpr
@@ -623,45 +636,48 @@ instance FromJSON LocalReg
 -- Emulación del derivado genérico para: newtype Unique = MkUnique Word64
 -- Se decodifica exactamente como Word64 y luego se construye el Unique.
 instance FromJSON GHC.Types.Unique.Unique where
-    parseJSON v =
-        (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
+  parseJSON v =
+    (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
+
 
 -- reemplaza tu main por este
 main :: IO ()
 main = do
-    putStrLn "== CmmNode C O JSON tests =="
+  putStrLn "== CmmNode C O JSON tests =="
 
-    -- 1) OK: objeto válido
-    let ok = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"GlobalScope\"}"
-    test "OK (object with tag/label/scope)" ok
+  -- 1) OK: objeto válido
+  let ok = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"GlobalScope\"}"
+  test "OK (object with tag/label/scope)" ok
 
-    -- 2) OK sin scope (usa GlobalScope por defecto)
-    let okNoScope = "{\"tag\":\"CmmEntry\",\"label\":1}"
-    test "OK (object without scope → defaults to GlobalScope)" okNoScope
+  -- 2) OK sin scope (usa GlobalScope por defecto)
+  let okNoScope = "{\"tag\":\"CmmEntry\",\"label\":1}"
+  test "OK (object without scope → defaults to GlobalScope)" okNoScope
 
-    -- 3) Falla: scope no soportado
-    let badScope = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"LocalScope\"}"
-    test "FAIL (unsupported scope)" badScope
+  -- 3) Falla: scope no soportado
+  let badScope = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"LocalScope\"}"
+  test "FAIL (unsupported scope)" badScope
 
-    -- 4) Falla: tag no soportado
-    let badTag = "{\"tag\":\"NotEntry\",\"label\":0}"
-    test "FAIL (unsupported tag)" badTag
+  -- 4) Falla: tag no soportado
+  let badTag = "{\"tag\":\"NotEntry\",\"label\":0}"
+  test "FAIL (unsupported tag)" badTag
 
-    -- 5) Falla: falta label
-    let missingLabel = "{\"tag\":\"CmmEntry\"}"
-    test "FAIL (missing label)" missingLabel
+  -- 5) Falla: falta label
+  let missingLabel = "{\"tag\":\"CmmEntry\"}"
+  test "FAIL (missing label)" missingLabel
 
-    -- 6) Falla: string “legacy” (ya no aceptamos Text puro)
-    let legacy = "\"CmmEntry\""
-    test "FAIL (string form no longer accepted)" legacy
+  -- 6) Falla: string “legacy” (ya no aceptamos Text puro)
+  let legacy = "\"CmmEntry\""
+  test "FAIL (string form no longer accepted)" legacy
 
-    putStrLn "== Done =="
+  putStrLn "== Done =="
+
   where
     test msg js = do
-        putStrLn $ "→ " <> msg
-        case eitherDecode @(CmmNode C O) (LBS.pack js) of
-            Right _ -> putStrLn "   decoded: OK"
-            Left e -> putStrLn $ "   decoded: ERROR → " <> e
+      putStrLn $ "→ " <> msg
+      case eitherDecode @(CmmNode C O) (LBS.pack js) of
+        Right _ -> putStrLn "   decoded: OK"
+        Left  e -> putStrLn $ "   decoded: ERROR → " <> e
+
 
 -- ===== FromJSON for CmmType (emulating genericParseJSON defaultOptions) =====
 -- JSON shape expected (TaggedObject):
@@ -676,52 +692,52 @@ main = do
 
 -- Open mirror of the internal category so we can rebuild using public ctors
 data CmmCatOpen
-    = OGcPtr
-    | OBits
-    | OFloat
-    | OVec Int CmmCatOpen
-    deriving (Show, Eq)
+  = OGcPtr
+  | OBits
+  | OFloat
+  | OVec Int CmmCatOpen
+  deriving (Show, Eq)
 
 instance FromJSON CmmCatOpen where
-    parseJSON = withObject "CmmCat" $ \o -> do
-        tag <- o .: "tag" :: Parser Text
-        case tag of
-            "GcPtrCat" -> pure OGcPtr
-            "BitsCat" -> pure OBits
-            "FloatCat" -> pure OFloat
-            "VecCat" -> do
-                cs <- o .: "contents"
-                (n, sub) <- Data.Aeson.parseJSON cs :: Parser (Int, CmmCatOpen)
-                pure (OVec n sub)
-            other -> fail ("Unknown CmmCat tag: " <> unpack other)
+  parseJSON = withObject "CmmCat" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "GcPtrCat" -> pure OGcPtr
+      "BitsCat"  -> pure OBits
+      "FloatCat" -> pure OFloat
+      "VecCat"   -> do
+        cs <- o .: "contents"
+        (n, sub) <- Data.Aeson.parseJSON cs :: Parser (Int, CmmCatOpen)
+        pure (OVec n sub)
+      other -> fail ("Unknown CmmCat tag: " <> unpack other)
 
 instance FromJSON Width where
-    parseJSON = withObject "Width" $ \o -> do
-        tag <- o .: "tag" :: Parser Text
-        case tag of
-            "W8" -> pure W8
-            "W16" -> pure W16
-            "W32" -> pure W32
-            "W64" -> pure W64
-            "W128" -> pure W128
-            "W256" -> pure W256
-            "W512" -> pure W512
-            other -> fail ("Unknown Width tag: " <> unpack other)
+  parseJSON = withObject "Width" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "W8"   -> pure W8
+      "W16"  -> pure W16
+      "W32"  -> pure W32
+      "W64"  -> pure W64
+      "W128" -> pure W128
+      "W256" -> pure W256
+      "W512" -> pure W512
+      other  -> fail ("Unknown Width tag: " <> unpack other)
 
 instance FromJSON CmmType where
-    parseJSON = withObject "CmmType" $ \o -> do
-        tag <- o .: "tag" :: Parser Text
-        case tag of
-            "CmmType" -> do
-                cs <- o .: "contents"
-                (cat, w) <- parseJSON cs :: Parser (CmmCatOpen, Width)
-                build cat w
-            other -> fail ("Expected tag CmmType, got: " <> unpack other)
-      where
-        build :: CmmCatOpen -> Width -> Parser CmmType
-        build OBits w = pure (cmmBits w)
-        build OFloat w = pure (cmmFloat w)
-        build (OVec n c) w = vec n <$> build c w
-        build OGcPtr _ =
-            -- Requires a Platform to construct (gcWord). Provide a Platform-aware parser if needed.
-            fail "GcPtrCat requires a Platform (use a Platform-aware parser to call gcWord)."
+  parseJSON = withObject "CmmType" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmType" -> do
+        cs <- o .: "contents"
+        (cat, w) <- parseJSON cs :: Parser (CmmCatOpen, Width)
+        build cat w
+      other -> fail ("Expected tag CmmType, got: " <> unpack other)
+    where
+      build :: CmmCatOpen -> Width -> Parser CmmType
+      build OBits      w = pure (cmmBits  w)
+      build OFloat     w = pure (cmmFloat w)
+      build (OVec n c) w = vec n <$> build c w
+      build OGcPtr     _ =
+        -- Requires a Platform to construct (gcWord). Provide a Platform-aware parser if needed.
+        fail "GcPtrCat requires a Platform (use a Platform-aware parser to call gcWord)."
