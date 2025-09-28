@@ -134,8 +134,7 @@ import GHC.Core.Coercion.Axiom (CoAxiom)
 import GHC.Core.Coercion.Axiom ( CoAxiom(..), Branched(..),Branches(..),BranchIndex(..),CoAxBranch(..))
 
 
-import GHC.Arr (Array(..), array)
-
+import GHC.Arr (Array(..))
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -491,7 +490,7 @@ instance FromJSON GHC.Core.TyCo.Rep.TyLit
 --https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Core-TyCon.html#t:TyCon
 --deriving instance Generic GHC.Types.FM.TyCon
 instance FromJSON GHC.Types.FM.TyCon
-  where 
+ where 
     parseJSON = 
         error "fala"
 
@@ -525,42 +524,10 @@ instance FromJSON ( GHC.Core.Coercion.Axiom.Branches Branched )
 --                        GHC.Core.Coercion.Axiom.CoAxBranch)
 
 
-deriving instance Generic GHC.Core.Coercion.Axiom.BranchIndex
---instance FromJSON GHC.Core.Coercion.Axiom.BranchIndex
--- seems to be a synonym for int
-
-
-deriving instance Generic GHC.Core.Coercion.Axiom.CoAxBranch
-instance FromJSON GHC.Core.Coercion.Axiom.CoAxBranch
- where
-    parseJSON = 
-        error "falla"
-
-
 --deriving instance Generic (GHC.Arr.Array
- --                        GHC.Core.Coercion.Axiom.BranchIndex
+ --                      GHC.Core.Coercion.Axiom.BranchIndex
  --                       GHC.Core.Coercion.Axiom.CoAxBranch)
- --                 
-
-
-      
--- FromJSON para: Array BranchIndex CoAxBranch
-instance FromJSON
-  (GHC.Arr.Array
-     GHC.Core.Coercion.Axiom.BranchIndex
-     GHC.Core.Coercion.Axiom.CoAxBranch) where
-  parseJSON v = do
-    ps <- parseJSON v
-            :: Parser [( GHC.Core.Coercion.Axiom.BranchIndex
-                       , GHC.Core.Coercion.Axiom.CoAxBranch )]
-    case ps of
-      [] -> fail "FromJSON (Array BranchIndex CoAxBranch): lista vacía"
-      _  ->
-        let is = Prelude.map fst ps
-            lo = Prelude.minimum is
-            hi = Prelude.maximum is
-        in pure (array (lo, hi) ps)
-
+ --                 --      GHC.Arr.Array
 
 -- JSON esperado: lista de pares [(i, e)]
 -- Ej.: [[0, "a"], [1, "b"], [2, "c"]]
