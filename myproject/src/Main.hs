@@ -427,6 +427,7 @@ instance FromJSON CmmInfoTable
 
 
 instance FromJSON GHC.Types.Var.Var where
+  parseJSON :: Value -> Parser Var
   parseJSON = withObject "Var" $ \o -> do
     tag <- o .: "tag" :: Parser Text
     case tag of
@@ -477,13 +478,11 @@ instance FromJSON GHC.Types.Var.Var where
 
 
 deriving instance Generic GHC.Core.TyCo.Rep.Type
-instance FromJSON GHC.Core.TyCo.Rep.Type
---instance FromJSON GHC.Core.TyCo.Rep.Type where
---   parseJSON =
+--instance FromJSON GHC.Core.TyCo.Rep.Type
+instance FromJSON GHC.Core.TyCo.Rep.Type 
+-- where
+--  parseJSON =
 --    error "falla"
-
-
-
 
 deriving instance Generic GHC.Core.TyCo.Rep.TyLit
 instance FromJSON GHC.Core.TyCo.Rep.TyLit
@@ -493,7 +492,7 @@ instance FromJSON GHC.Core.TyCo.Rep.TyLit
 instance FromJSON GHC.Types.FM.TyCon
   where 
     parseJSON = 
-        error "fala"
+       error "fala"
 
 deriving instance Generic GHC.Types.FM.FunTyFlag
 instance FromJSON GHC.Types.FM.FunTyFlag
