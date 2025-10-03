@@ -209,6 +209,46 @@ instance (FromJSON a) => FromJSON (LabelMap a) where
 deriving instance Generic CmmStackInfo
 instance FromJSON CmmStackInfo
 
+
+-- | O → O nodes: parse JSON into real constructors with arguments.
+parseNodeO_O_json :: Value -> Parser (CmmNode O O)
+parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+        "CmmComment" -> do
+            txt <- o .: "contents" :: Parser Text
+            pure (CmmComment (fsLit (unpack txt)))
+
+        "CmmTick" -> do
+            tick <- o .: "contents" :: Parser CmmTickish
+            pure (CmmTick tick)
+
+        "CmmUnwind" -> do
+            regs <- o .: "contents" :: Parser [(GlobalReg, Maybe CmmExpr)]
+            pure (CmmUnwind regs)
+
+        "CmmAssign" -> do
+            (reg, expr) <- o .: "contents" :: Parser (CmmReg, CmmExpr)
+            pure (CmmAssign reg expr)
+
+        "CmmStore" -> do
+            (addr, rhs, align) <- o .: "contents" :: Parser (CmmExpr, CmmExpr, AlignmentSpec)
+            pure (CmmStore addr rhs align)
+
+        "CmmUnsafeForeignCall" -> do
+            (tgt, results, args) <- o .: "contents" :: Parser (ForeignTarget, [CmmFormal], [CmmActual])
+            pure (CmmUnsafeForeignCall tgt results args)
+
+        other ->
+            fail ("Unsupported CmmNode O O tag: " <> unpack other)
+
+
+instance FromJSON CmmTickish where
+    parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
+
+instance FromJSON ForeignTarget where
+    parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
+
 -- needed because of instance FromJSON CmmTopInfo
 
 -- C → O: parse a real JSON object
@@ -420,12 +460,14 @@ deriving instance Generic CmmInfoTable
 -- instance FromJSON CmmInfoTable where
 -- parseJSON _ = fail "dummy"
 
-instance FromJSON CmmInfoTable
+instance FromJSON CmmInfoTable 
+--this depends on GHC.Types.Var.Var, which seems to depend on a lot of GHC stuff
+-- maybe i should not bother to serialize GHC.Types.Var.Var? 
 
---instance FromJSON GHC.Types.Var.Var where
---    parseJSON _ = fail "dummy"
+instance FromJSON GHC.Types.Var.Var where
+    parseJSON _ = fail "dummy"
 
-
+{-
 instance FromJSON GHC.Types.Var.Var where
   parseJSON :: Value -> Parser Var
   parseJSON = withObject "Var" $ \o -> do
@@ -475,36 +517,37 @@ instance FromJSON GHC.Types.Var.Var where
 
       other ->
         fail ("FromJSON Var: unknown tag " <> unpack other)
+-}
 
-
-deriving instance Generic GHC.Core.TyCo.Rep.Type
+--deriving instance Generic GHC.Core.TyCo.Rep.Type
 --instance FromJSON GHC.Core.TyCo.Rep.Type
-instance FromJSON GHC.Core.TyCo.Rep.Type 
+--instance FromJSON GHC.Core.TyCo.Rep.Type 
 -- where
 --  parseJSON =
 --    error "falla"
 
-deriving instance Generic GHC.Core.TyCo.Rep.TyLit
-instance FromJSON GHC.Core.TyCo.Rep.TyLit
+--deriving instance Generic GHC.Core.TyCo.Rep.TyLit
+--instance FromJSON GHC.Core.TyCo.Rep.TyLit
 
 --https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Core-TyCon.html#t:TyCon
 --deriving instance Generic GHC.Types.FM.TyCon
-instance FromJSON GHC.Types.FM.TyCon
-  where 
-    parseJSON = 
-       error "fala"
+--instance FromJSON GHC.Types.FM.TyCon
+--  where 
+--    parseJSON = 
+--       error "fala"
 
-deriving instance Generic GHC.Types.FM.FunTyFlag
-instance FromJSON GHC.Types.FM.FunTyFlag
+--deriving instance Generic GHC.Types.FM.FunTyFlag
+--instance FromJSON GHC.Types.FM.FunTyFlag
 
 
 --deriving instance Generic GHC.Plugins.Coercion
-deriving instance Generic GHC.Core.TyCo.Rep.Coercion
-instance FromJSON GHC.Types.FM.Coercion 
- where 
-   parseJSON = 
-       error "fala"
+--deriving instance Generic GHC.Core.TyCo.Rep.Coercion
+--instance FromJSON GHC.Types.FM.Coercion 
+-- where 
+ --  parseJSON = 
+ --      error "fala"
 
+{-
 deriving instance Generic (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched)    
 instance FromJSON (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched) 
   where 
@@ -517,23 +560,23 @@ instance FromJSON ( GHC.Core.Coercion.Axiom.Branches Branched )
  where
     parseJSON =
         error "falla"
-
+-}
 
 --deriving instance Generic (ghc-internal-9.1002.0:GHC.Internal.Arr.Array
 --                       GHC.Core.Coercion.Axiom.BranchIndex
 --                        GHC.Core.Coercion.Axiom.CoAxBranch)
 
 
-deriving instance Generic GHC.Core.Coercion.Axiom.BranchIndex
+--deriving instance Generic GHC.Core.Coercion.Axiom.BranchIndex
 --instance FromJSON GHC.Core.Coercion.Axiom.BranchIndex
 -- seems to be a synonym for int
 
 
-deriving instance Generic GHC.Core.Coercion.Axiom.CoAxBranch
-instance FromJSON GHC.Core.Coercion.Axiom.CoAxBranch
- where
-    parseJSON = 
-        error "falla"
+--deriving instance Generic GHC.Core.Coercion.Axiom.CoAxBranch
+--instance FromJSON GHC.Core.Coercion.Axiom.CoAxBranch
+-- where
+--    parseJSON = 
+--        error "falla"
 
 
 --deriving instance Generic (GHC.Arr.Array
@@ -544,6 +587,7 @@ instance FromJSON GHC.Core.Coercion.Axiom.CoAxBranch
 
       
 -- FromJSON para: Array BranchIndex CoAxBranch
+{-
 instance FromJSON
   (GHC.Arr.Array
      GHC.Core.Coercion.Axiom.BranchIndex
@@ -559,7 +603,7 @@ instance FromJSON
             lo = Prelude.minimum is
             hi = Prelude.maximum is
         in pure (array (lo, hi) ps)
-
+-}
 
 -- JSON esperado: lista de pares [(i, e)]
 -- Ej.: [[0, "a"], [1, "b"], [2, "c"]]
@@ -575,6 +619,7 @@ instance FromJSON
         in pure (array (lo, hi) ps)
 -}
 
+{-
 deriving instance Generic ( GHC.Types.FM.VarBndr GHC.Types.FM.TyCoVar GHC.Types.FM.ForAllTyFlag)
 instance FromJSON ( GHC.Types.FM.VarBndr GHC.Types.FM.TyCoVar GHC.Types.FM.ForAllTyFlag)
 
@@ -615,12 +660,14 @@ deriving instance Generic GHC.Core.ConLike.ConLike
 instance FromJSON GHC.Core.ConLike.ConLike where
     parseJSON =
         error "falla"
-
+-}
 -- seems this type does not export data constructor, must check, but did import type itself
 -- instance FromJSON PatSyn wnere
 --  parseJSON =
 --    error "falla"
 
+
+{-
 instance FromJSON GHC.Types.FM.FieldLabel where
     parseJSON :: Value -> Parser GHC.Types.FM.FieldLabel
     parseJSON =
@@ -636,6 +683,8 @@ instance FromJSON GHC.Types.FM.DataCon where
     parseJSON :: Value -> Parser GHC.Types.FM.DataCon
     parseJSON =
         error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+
+-}
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
 instance FromJSON GHC.Types.ForeignCall.ForeignCall
@@ -703,6 +752,7 @@ instance FromJSON ByteArray where
 -- UniqFM does not export constructor
 -- https://hackage-content.haskell.org/package/ghc-9.12.2/docs/GHC-Types-Unique-FM.html
 
+{-
 instance FromJSON (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin) where
     parseJSON :: Value -> Parser (GHC.Types.FM.UniqFM Name ConcreteTvOrigin)
     parseJSON =
@@ -711,6 +761,7 @@ instance FromJSON (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin
 instance FromJSON GHC.Types.Name.Name where
     parseJSON =
         error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+-}
 
 deriving instance Generic ProfilingInfo
 instance FromJSON ProfilingInfo
@@ -753,6 +804,7 @@ instance FromJSON LocalReg
 instance FromJSON GHC.Types.Unique.Unique where
     parseJSON v =
         (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
+--is this used by something in a cmm module?
 
 -- reemplaza tu main por este
 main :: IO ()

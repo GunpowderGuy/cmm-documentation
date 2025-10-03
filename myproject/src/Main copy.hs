@@ -363,7 +363,7 @@ type Rep_GenCmmStaticsFalse =
                     :*: S1 NoSel (Rec0 [CmmStatic])
                 )
         )
-
+l
 instance Generic (GenCmmStatics 'False) where
     type Rep (GenCmmStatics 'False) = Rep_GenCmmStaticsFalse
     from (CmmStatics lbl info ccs lits refs) =
@@ -424,7 +424,7 @@ instance FromJSON CmmInfoTable
 --instance FromJSON GHC.Types.Var.Var where
 --    parseJSON _ = fail "dummy"
 
-
+{-
 instance FromJSON GHC.Types.Var.Var where
   parseJSON = withObject "Var" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -473,10 +473,10 @@ instance FromJSON GHC.Types.Var.Var where
 
       other ->
         fail ("FromJSON Var: unknown tag " <> unpack other)
+-}
 
-
-deriving instance Generic GHC.Core.TyCo.Rep.Type
-instance FromJSON GHC.Core.TyCo.Rep.Type
+--deriving instance Generic GHC.Core.TyCo.Rep.Type
+--instance FromJSON GHC.Core.TyCo.Rep.Type
 --instance FromJSON GHC.Core.TyCo.Rep.Type where
 --   parseJSON =
 --    error "falla"
@@ -484,27 +484,28 @@ instance FromJSON GHC.Core.TyCo.Rep.Type
 
 
 
-deriving instance Generic GHC.Core.TyCo.Rep.TyLit
-instance FromJSON GHC.Core.TyCo.Rep.TyLit
+--deriving instance Generic GHC.Core.TyCo.Rep.TyLit
+--instance FromJSON GHC.Core.TyCo.Rep.TyLit
 
 --https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Core-TyCon.html#t:TyCon
 --deriving instance Generic GHC.Types.FM.TyCon
-instance FromJSON GHC.Types.FM.TyCon
- where 
-    parseJSON = 
-        error "fala"
+--instance FromJSON GHC.Types.FM.TyCon
+-- where 
+--    parseJSON = 
+--        error "fala"
 
-deriving instance Generic GHC.Types.FM.FunTyFlag
-instance FromJSON GHC.Types.FM.FunTyFlag
+--deriving instance Generic GHC.Types.FM.FunTyFlag
+--instance FromJSON GHC.Types.FM.FunTyFlag
 
 
 --deriving instance Generic GHC.Plugins.Coercion
-deriving instance Generic GHC.Core.TyCo.Rep.Coercion
-instance FromJSON GHC.Types.FM.Coercion 
- where 
-   parseJSON = 
-       error "fala"
+--deriving instance Generic GHC.Core.TyCo.Rep.Coercion
+--instance FromJSON GHC.Types.FM.Coercion 
+-- where 
+ --  parseJSON = 
+ --      error "fala"
 
+{-
 deriving instance Generic (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched)    
 instance FromJSON (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched) 
   where 
@@ -517,7 +518,7 @@ instance FromJSON ( GHC.Core.Coercion.Axiom.Branches Branched )
  where
     parseJSON =
         error "falla"
-
+-}
 
 --deriving instance Generic (ghc-internal-9.1002.0:GHC.Internal.Arr.Array
 --                       GHC.Core.Coercion.Axiom.BranchIndex
