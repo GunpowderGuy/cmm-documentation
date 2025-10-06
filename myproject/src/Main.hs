@@ -252,6 +252,7 @@ parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
 instance FromJSON CmmTickish where
     parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
 
+--This two seem like instances i dont have to handle
 
 instance FromJSON ForeignTarget where
     parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
@@ -375,21 +376,6 @@ instance
       other ->
         fail ("Unsupported Graph' tag: " <> unpack other)
 
-
--- https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
-
-{-
-instance
-    FromJSON
-        ( GHC.Cmm.Dataflow.Graph.Graph'
-            GHC.Cmm.Dataflow.Block.Block
-            CmmNode
-            GHC.Cmm.Dataflow.Block.C
-            GHC.Cmm.Dataflow.Block.C
-        )
-    where
-    parseJSON _ = fail "dummy"
--}
 
 -- Block C O  (entry node + open-open middle)
 instance FromJSON (Block CmmNode C O) where
@@ -561,42 +547,42 @@ instance FromJSON GHC.Types.Var.Var where
 
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
-instance FromJSON GHC.Types.ForeignCall.ForeignCall
+--instance FromJSON GHC.Types.ForeignCall.ForeignCall
 
 deriving instance Generic GHC.Types.ForeignCall.CCallSpec
 
 
-instance FromJSON GHC.Types.ForeignCall.CCallSpec where
-    parseJSON =
-        error "Falla pues"
+--instance FromJSON GHC.Types.ForeignCall.CCallSpec where
+--    parseJSON =
+--        error "Falla pues"
 
 deriving instance Generic GHC.Types.ForeignCall.CCallTarget
 
 
-instance FromJSON GHC.Types.CCallTarget where
-    parseJSON =
-        error "Falla pues"
+--instance FromJSON GHC.Types.CCallTarget where
+--    parseJSON =
+--        error "Falla pues"
 
 deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
+--instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 
 instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId) where
     parseJSON =
         error "falla pues"
 
 deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
+--instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 
 deriving instance Generic GHC.Types.FM.UnitId
-instance FromJSON GHC.Types.FM.UnitId
+--instance FromJSON GHC.Types.FM.UnitId
 
 deriving instance Generic GHC.Types.FM.FastString
-instance FromJSON GHC.Types.FM.FastString
+--instance FromJSON GHC.Types.FM.FastString
 
 
-instance FromJSON GHC.Types.FM.FastZString where
-    parseJSON =
-        error "falla pues"
+--instance FromJSON GHC.Types.FM.FastZString where
+--    parseJSON =
+--        error "falla pues"
 
 -- deriving instance Generic Data.ByteString.Short.ShortByteString
 instance FromJSON Data.ByteString.Short.ShortByteString
