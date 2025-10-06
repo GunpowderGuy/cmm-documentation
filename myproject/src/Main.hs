@@ -339,8 +339,46 @@ instance FromJSON (CmmNode O C) where
   parseJSON = parseNodeO_C_json
 
 
+--deriving instance Generic  ( GHC.Cmm.Dataflow.Block.Block CmmNode GHC.Cmm.Dataflow.Block.C GHC.Cmm.Dataflow.Block.C )
+
+-- Graph' Block CmmNode C C  (closed entry, closed exit)
+instance
+  FromJSON
+    ( GHC.Cmm.Dataflow.Graph.Graph'
+        GHC.Cmm.Dataflow.Block.Block
+        CmmNode
+        GHC.Cmm.Dataflow.Block.C
+        GHC.Cmm.Dataflow.Block.C
+    )
+  where
+  parseJSON = withObject "Graph' Block CmmNode C C" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- Accept the legacy 3-tuple but ignore entry/exit blocks for C/C graphs.
+      -- { "tag":"GMany"
+      -- , "contents": [ <_entry :: Block O C>            -- ignored
+      --               , <body   :: LabelMap (Block C C)>  -- used
+      --               , <_exit  :: Block C O> ] }         -- ignored
+      "GMany" -> do
+        (_entryOC, bodyCC, _exitCO)
+          <- o .: "contents"
+             :: Parser
+                  ( Block CmmNode O C
+                  , LabelMap (Block CmmNode C C)
+                  , Block CmmNode C O
+                  )
+        -- Closed/Closed graphs carry no explicit entry/exit blocks:
+        -- entry  :: MaybeO C (Block O C)  = NothingO
+        -- exit   :: MaybeO C (Block C O)  = NothingC
+        pure (GMany NothingO bodyCC NothingO)
+
+      other ->
+        fail ("Unsupported Graph' tag: " <> unpack other)
+
 
 -- https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
+
+{-
 instance
     FromJSON
         ( GHC.Cmm.Dataflow.Graph.Graph'
@@ -351,6 +389,96 @@ instance
         )
     where
     parseJSON _ = fail "dummy"
+-}
+
+-- Block C O  (entry node + open-open middle)
+instance FromJSON (Block CmmNode C O) where
+  parseJSON = withObject "Block C O" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- { "tag":"BFirst", "contents": <CmmNode C O> }
+      "BFirst" -> do
+        hd <- o .: "contents" :: Parser (CmmNode C O)
+        pure (BlockCO hd BNil)  -- single-entry, empty middle
+
+      -- { "tag":"BHead", "contents": [ <CmmNode C O>, <Block O O> ] }
+      "BHead" -> do
+        (hd, mid) <- o .: "contents" :: Parser (CmmNode C O, Block CmmNode O O)
+        pure (BlockCO hd mid)
+
+      -- { "tag":"BCat", "contents": [ <Block C O>, <Block O O> ] }
+      "BCat" -> do
+        (b1, b2) <- o .: "contents" :: Parser (Block CmmNode C O, Block CmmNode O O)
+        pure (blockAppend b1 b2)  -- append OO tail to CO, stays CO
+
+      other -> fail ("Unsupported Block C O tag: " <> unpack other)
+
+
+-- Block O O  (pure middle)
+instance FromJSON (Block CmmNode O O) where
+  parseJSON = withObject "Block O O" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- { "tag":"BNil" }
+      "BNil"     -> pure BNil
+      -- { "tag":"BMiddle", "contents": <CmmNode O O> }
+      "BMiddle"  -> BMiddle <$> (o .: "contents" :: Parser (CmmNode O O))
+      -- { "tag":"BCat", "contents": [ <Block O O>, <Block O O> ] }
+      "BCat"     -> do (b1,b2) <- o .: "contents"; pure (BCat b1 b2)
+      -- { "tag":"BCons", "contents": [ <CmmNode O O>, <Block O O> ] }
+      "BCons"    -> do (n,b) <- o .: "contents";  pure (BCons n b)
+      -- { "tag":"BSnoc", "contents": [ <Block O O>, <CmmNode O O> ] }
+      "BSnoc"    -> do (b,n) <- o .: "contents";  pure (BSnoc b n)
+      other      -> fail ("Unsupported Block O O tag: " <> unpack other)
+
+-- Block O C  (open-open middle + last node)
+instance FromJSON (Block CmmNode O C) where
+  parseJSON = withObject "Block O C" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- { "tag":"BLast", "contents": <CmmNode O C> }
+      "BLast" -> do
+        lt <- o .: "contents" :: Parser (CmmNode O C)
+        pure (BlockOC BNil lt)     -- empty middle + last
+
+      -- { "tag":"BTail", "contents": [ <Block O O>, <CmmNode O C> ] }
+      "BTail" -> do
+        (mid, lt) <- o .: "contents" :: Parser (Block CmmNode O O, CmmNode O C)
+        pure (BlockOC mid lt)
+
+      -- { "tag":"BCat", "contents": [ <Block O O>, <Block O C> ] }
+      "BCat" -> do
+        (b1, b2) <- o .: "contents" :: Parser (Block CmmNode O O, Block CmmNode O C)
+        pure (blockAppend b1 b2)    -- OO + OC → OC
+
+      other -> fail ("Unsupported Block O C tag: " <> unpack other)
+
+-- Block C C  (entry node + middle OO + last node)
+instance FromJSON (Block CmmNode C C) where
+  parseJSON = withObject "Block C C" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      -- { "tag":"BCat",  "contents": [ <Block C O>, <Block O C> ] }
+      "BCat" -> do
+        (bco, boc) <- o .: "contents" :: Parser (Block CmmNode C O, Block CmmNode O C)
+        let (hd, mid1) = blockSplitHead bco
+            (mid2, lt) = blockSplitTail boc
+            mid        = blockConcat [mid1, mid2]
+        pure (BlockCC hd mid lt)
+
+      -- { "tag":"BHead", "contents": [ <CmmNode C O>, <Block O C> ] }
+      "BHead" -> do
+        (hd, boc) <- o .: "contents" :: Parser (CmmNode C O, Block CmmNode O C)
+        let (mid, lt) = blockSplitTail boc
+        pure (BlockCC hd mid lt)
+
+      -- { "tag":"BTail", "contents": [ <Block C O>, <CmmNode O C> ] }
+      "BTail" -> do
+        (bco, lt) <- o .: "contents" :: Parser (Block CmmNode C O, CmmNode O C)
+        let (hd, mid) = blockSplitHead bco
+        pure (BlockCC hd mid lt)
+
+      other -> fail ("Unsupported Block C C tag: " <> unpack other)
 
 -- import GHC.Cmm.Dataflow.Graph are imported because of
 -- import GHC.Cmm.Dataflow.Block  the above
@@ -363,80 +491,25 @@ instance FromJSON Label where
 deriving instance Generic SectionType
 instance FromJSON SectionType
 
--- No-selector meta for S1 (use the type-level 'MetaSel constructor)
-type NoSel =
-    'MetaSel 'Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy
 
-type Rep_GenCmmStaticsTrue =
-    D1
-        ('MetaData "GenCmmStatics 'True" "GHC.Cmm" "ghc" 'False)
-        ( C1
-            ('MetaCons "CmmStaticsRaw" 'PrefixI 'False)
-            ( S1 NoSel (Rec0 CLabel)
-                :*: S1 NoSel (Rec0 [CmmStatic])
-            )
-        )
+-- GenCmmStatics 'False: acepta CmmStatics y CmmStaticsRaw
+instance FromJSON (GenCmmStatics 'False) where
+  parseJSON = withObject "GenCmmStatics 'False" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmStatics" -> do
+        (lbl, itbl, ccs, payload, nonPtrs) <-
+          o .: "contents"
+            :: Parser (CLabel, CmmInfoTable, CostCentreStack, [CmmLit], [CmmLit])
+        pure (CmmStatics lbl itbl ccs payload nonPtrs)
 
-instance Generic (GenCmmStatics 'True) where
-    type Rep (GenCmmStatics 'True) = Rep_GenCmmStaticsTrue
-    from (CmmStaticsRaw lbl statics) =
-        M1 (M1 (M1 (K1 lbl) :*: M1 (K1 statics)))
-    to (M1 (M1 (a :*: b))) =
-        CmmStaticsRaw (unK1 (unM1 a)) (unK1 (unM1 b))
+      "CmmStaticsRaw" -> do
+        (lbl, statics) <-
+          o .: "contents"
+            :: Parser (CLabel, [CmmStatic])
+        pure (CmmStaticsRaw lbl statics)
 
---------------------------------------------------------------------------------
--- GenCmmStatics 'False  ==> CmmStatics  :+:  CmmStaticsRaw
-
-type Rep_GenCmmStaticsFalse =
-    D1
-        ('MetaData "GenCmmStatics 'False" "GHC.Cmm" "ghc" 'False)
-        ( -- CmmStatics :: CLabel -> CmmInfoTable -> CostCentreStack
-          --           -> [CmmLit] -> [CmmLit] -> GenCmmStatics 'False
-          C1
-            ('MetaCons "CmmStatics" 'PrefixI 'False)
-            ( S1 NoSel (Rec0 CLabel)
-                :*: S1 NoSel (Rec0 CmmInfoTable)
-                :*: S1 NoSel (Rec0 CostCentreStack)
-                :*: S1 NoSel (Rec0 [CmmLit])
-                :*: S1 NoSel (Rec0 [CmmLit])
-            )
-            :+:
-            -- CmmStaticsRaw :: CLabel -> [CmmStatic] -> GenCmmStatics a
-            C1
-                ('MetaCons "CmmStaticsRaw" 'PrefixI 'False)
-                ( S1 NoSel (Rec0 CLabel)
-                    :*: S1 NoSel (Rec0 [CmmStatic])
-                )
-        )
-
-instance Generic (GenCmmStatics 'False) where
-    type Rep (GenCmmStatics 'False) = Rep_GenCmmStaticsFalse
-    from (CmmStatics lbl info ccs lits refs) =
-        M1
-            ( L1
-                ( M1
-                    ( M1 (K1 lbl)
-                        :*: M1 (K1 info)
-                        :*: M1 (K1 ccs)
-                        :*: M1 (K1 lits)
-                        :*: M1 (K1 refs)
-                    )
-                )
-            )
-    from (CmmStaticsRaw lbl statics) =
-        M1 (R1 (M1 (M1 (K1 lbl) :*: M1 (K1 statics))))
-    to (M1 (L1 (M1 (a :*: b :*: c :*: d :*: e)))) =
-        CmmStatics
-            (unK1 (unM1 a))
-            (unK1 (unM1 b))
-            (unK1 (unM1 c))
-            (unK1 (unM1 d))
-            (unK1 (unM1 e))
-    to (M1 (R1 (M1 (a :*: b)))) =
-        CmmStaticsRaw (unK1 (unM1 a)) (unK1 (unM1 b))
-
-instance FromJSON (GenCmmStatics 'True) where
-    parseJSON = genericParseJSON defaultOptions
+      other -> fail $ "GenCmmStatics 'False: unknown tag " <> unpack other
 
 -- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
 -- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
@@ -447,8 +520,22 @@ instance FromJSON CmmStatic
 instance FromJSON BS.ByteString where
     parseJSON = withText "ByteString" (pure . TE.encodeUtf8)
 
-instance FromJSON (GenCmmStatics 'False) where
-    parseJSON = genericParseJSON defaultOptions
+
+-- GenCmmStatics 'True: solo permite CmmStaticsRaw
+instance FromJSON (GenCmmStatics 'True) where
+  parseJSON = withObject "GenCmmStatics 'True" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmStaticsRaw" -> do
+        (lbl, statics) <-
+          o .: "contents"
+            :: Parser (CLabel, [CmmStatic])
+        pure (CmmStaticsRaw lbl statics)
+
+      "CmmStatics" ->
+        fail "GenCmmStatics 'True cannot be constructed with CmmStatics"
+
+      other -> fail $ "GenCmmStatics 'True: unknown tag " <> unpack other
 
 deriving instance Generic CmmLit
 instance FromJSON CmmLit where
@@ -471,231 +558,13 @@ instance FromJSON CmmInfoTable
 instance FromJSON GHC.Types.Var.Var where
     parseJSON _ = fail "dummy"
 
-{-
-instance FromJSON GHC.Types.Var.Var where
-  parseJSON :: Value -> Parser Var
-  parseJSON = withObject "Var" $ \o -> do
-    tag <- o .: "tag" :: Parser Text
-    case tag of
-      -- LocalVar: (IdDetails, Name, Mult, Type, Maybe IdInfo)
-      "LocalVar" -> do
-        (details, name, mult, ty, minfo)
-          <- o .: "contents"
-             :: Parser ( GHC.Types.Id.Info.IdDetails
-                       , GHC.Types.Name.Name
-                       , GHC.Core.TyCo.Rep.Mult
-                       , GHC.Core.TyCo.Rep.Type
-                       , Maybe GHC.Types.Id.Info.IdInfo )
-        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
-        pure (GHC.Types.Var.mkLocalVar details name mult ty info)
 
-      -- GlobalVar: (IdDetails, Name, Type, Maybe IdInfo)
-      "GlobalVar" -> do
-        (details, name, ty, minfo)
-          <- o .: "contents"
-             :: Parser ( GHC.Types.Id.Info.IdDetails
-                       , GHC.Types.Name.Name
-                       , GHC.Core.TyCo.Rep.Type
-                       , Maybe GHC.Types.Id.Info.IdInfo )
-        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
-        pure (GHC.Types.Var.mkGlobalVar details name ty info)
-
-      -- ExportedLocalVar: (IdDetails, Name, Type, Maybe IdInfo)
-      "ExportedLocalVar" -> do
-        (details, name, ty, minfo)
-          <- o .: "contents"
-             :: Parser ( GHC.Types.Id.Info.IdDetails
-                       , GHC.Types.Name.Name
-                       , GHC.Core.TyCo.Rep.Type
-                       , Maybe GHC.Types.Id.Info.IdInfo )
-        let info = maybe GHC.Types.Id.Info.vanillaIdInfo id minfo
-        pure (GHC.Types.Var.mkExportedLocalVar details name ty info)
-
-      -- CoVar: (Name, Type)
-      "CoVar" -> do
-        (name, ty)
-          <- o .: "contents"
-             :: Parser ( GHC.Types.Name.Name
-                       , GHC.Core.TyCo.Rep.Type )
-        pure (GHC.Types.Var.mkCoVar name ty)
-
-      other ->
-        fail ("FromJSON Var: unknown tag " <> unpack other)
--}
-
---deriving instance Generic GHC.Core.TyCo.Rep.Type
---instance FromJSON GHC.Core.TyCo.Rep.Type
---instance FromJSON GHC.Core.TyCo.Rep.Type 
--- where
---  parseJSON =
---    error "falla"
-
---deriving instance Generic GHC.Core.TyCo.Rep.TyLit
---instance FromJSON GHC.Core.TyCo.Rep.TyLit
-
---https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Core-TyCon.html#t:TyCon
---deriving instance Generic GHC.Types.FM.TyCon
---instance FromJSON GHC.Types.FM.TyCon
---  where 
---    parseJSON = 
---       error "fala"
-
---deriving instance Generic GHC.Types.FM.FunTyFlag
---instance FromJSON GHC.Types.FM.FunTyFlag
-
-
---deriving instance Generic GHC.Plugins.Coercion
---deriving instance Generic GHC.Core.TyCo.Rep.Coercion
---instance FromJSON GHC.Types.FM.Coercion 
--- where 
- --  parseJSON = 
- --      error "fala"
-
-{-
-deriving instance Generic (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched)    
-instance FromJSON (GHC.Core.Coercion.Axiom.CoAxiom GHC.Core.Coercion.Axiom.Branched) 
-  where 
-    parseJSON =
-        error "falla"
-
-
-deriving instance Generic (GHC.Core.Coercion.Axiom.Branches Branched)
-instance FromJSON ( GHC.Core.Coercion.Axiom.Branches Branched )
- where
-    parseJSON =
-        error "falla"
--}
-
---deriving instance Generic (ghc-internal-9.1002.0:GHC.Internal.Arr.Array
---                       GHC.Core.Coercion.Axiom.BranchIndex
---                        GHC.Core.Coercion.Axiom.CoAxBranch)
-
-
---deriving instance Generic GHC.Core.Coercion.Axiom.BranchIndex
---instance FromJSON GHC.Core.Coercion.Axiom.BranchIndex
--- seems to be a synonym for int
-
-
---deriving instance Generic GHC.Core.Coercion.Axiom.CoAxBranch
---instance FromJSON GHC.Core.Coercion.Axiom.CoAxBranch
--- where
---    parseJSON = 
---        error "falla"
-
-
---deriving instance Generic (GHC.Arr.Array
- --                        GHC.Core.Coercion.Axiom.BranchIndex
- --                       GHC.Core.Coercion.Axiom.CoAxBranch)
- --                 
-
-
-      
--- FromJSON para: Array BranchIndex CoAxBranch
-{-
-instance FromJSON
-  (GHC.Arr.Array
-     GHC.Core.Coercion.Axiom.BranchIndex
-     GHC.Core.Coercion.Axiom.CoAxBranch) where
-  parseJSON v = do
-    ps <- parseJSON v
-            :: Parser [( GHC.Core.Coercion.Axiom.BranchIndex
-                       , GHC.Core.Coercion.Axiom.CoAxBranch )]
-    case ps of
-      [] -> fail "FromJSON (Array BranchIndex CoAxBranch): lista vacía"
-      _  ->
-        let is = Prelude.map fst ps
-            lo = Prelude.minimum is
-            hi = Prelude.maximum is
-        in pure (array (lo, hi) ps)
--}
-
--- JSON esperado: lista de pares [(i, e)]
--- Ej.: [[0, "a"], [1, "b"], [2, "c"]]
-{-instance (Ix i, Ord i, FromJSON i, FromJSON e) => FromJSON (Array i e) where
-  parseJSON v = do
-    ps <- parseJSON v :: Parser [(i, e)]
-    case ps of
-      [] -> fail "Array FromJSON: lista vacía; no puedo deducir bounds"
-      _  -> 
-        let is = map fst ps
-            lo = minimum is
-            hi = maximum is
-        in pure (array (lo, hi) ps)
--}
-
-{-
-deriving instance Generic ( GHC.Types.FM.VarBndr GHC.Types.FM.TyCoVar GHC.Types.FM.ForAllTyFlag)
-instance FromJSON ( GHC.Types.FM.VarBndr GHC.Types.FM.TyCoVar GHC.Types.FM.ForAllTyFlag)
-
-deriving instance Generic GHC.Types.FM.ForAllTyFlag
-instance FromJSON GHC.Types.FM.ForAllTyFlag
-
-
-deriving instance Generic GHC.Types.FM.Specificity
-instance FromJSON GHC.Types.FM.Specificity
-
-instance FromJSON IdInfo where
-    parseJSON =
-        error "falla"
-
-deriving instance Generic IdDetails
-instance FromJSON IdDetails
-
-instance FromJSON GHC.Types.FM.CbvMark where
-    parseJSON =
-        error "falla"
-
-instance FromJSON GHC.Types.FM.TickBoxOp where
-    parseJSON =
-        error "falla"
-
-instance FromJSON GHC.Builtin.PrimOps.PrimOp where
-    parseJSON =
-        error "falla"
-
--- check if i can import data constructor
-instance FromJSON GHC.Core.Class.Class where
-    parseJSON =
-        error "falla"
-
-deriving instance Generic GHC.Core.ConLike.ConLike
-
--- instance FromJSON GHC.Core.ConLike.ConLike
-instance FromJSON GHC.Core.ConLike.ConLike where
-    parseJSON =
-        error "falla"
--}
--- seems this type does not export data constructor, must check, but did import type itself
--- instance FromJSON PatSyn wnere
---  parseJSON =
---    error "falla"
-
-
-{-
-instance FromJSON GHC.Types.FM.FieldLabel where
-    parseJSON :: Value -> Parser GHC.Types.FM.FieldLabel
-    parseJSON =
-        error "falla pues"
-
-instance FromJSON GHC.Types.FM.RecSelParent where
-    parseJSON =
-        error "falla pues"
-
--- deriving instance Generic GHC.Types.FM.DataCon
-
-instance FromJSON GHC.Types.FM.DataCon where
-    parseJSON :: Value -> Parser GHC.Types.FM.DataCon
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
-
--}
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
 instance FromJSON GHC.Types.ForeignCall.ForeignCall
 
 deriving instance Generic GHC.Types.ForeignCall.CCallSpec
 
--- instance FromJSON GHC.Types.ForeignCall.CCallSpec
 
 instance FromJSON GHC.Types.ForeignCall.CCallSpec where
     parseJSON =
@@ -703,7 +572,6 @@ instance FromJSON GHC.Types.ForeignCall.CCallSpec where
 
 deriving instance Generic GHC.Types.ForeignCall.CCallTarget
 
--- instance FromJSON GHC.Types.CCallTarget
 
 instance FromJSON GHC.Types.CCallTarget where
     parseJSON =
@@ -725,9 +593,6 @@ instance FromJSON GHC.Types.FM.UnitId
 deriving instance Generic GHC.Types.FM.FastString
 instance FromJSON GHC.Types.FM.FastString
 
--- instance FromJSON GHC.Types.FM.RecSelParent where
---  parseJSON =
---    fail "falla pues"
 
 instance FromJSON GHC.Types.FM.FastZString where
     parseJSON =
@@ -736,36 +601,11 @@ instance FromJSON GHC.Types.FM.FastZString where
 -- deriving instance Generic Data.ByteString.Short.ShortByteString
 instance FromJSON Data.ByteString.Short.ShortByteString
 
--- deriving instance Generic Data.Array.Byte.ByteArray no se puede generar por ser tipo primigeneo
-
--- Instancia dummy: JSON → [Word8] → ShortByteString → ByteArray interno
--- instance FromJSON ByteArray where
--- parseJSON v = do
---  ws <- parseJSON v :: Parser BS.ByteString  -- Aeson ya sabe convertir de String→ByteString
--- convertimos a ShortByteString y sacamos el ByteArray interno
---  let sbs = toShort ws
--- Ojo: esto usa el campo interno de ShortByteString (que es ByteArray)
---     arr = case sbs of SBS ba -> ba
--- pure arr
 
 instance FromJSON ByteArray where
     parseJSON =
         error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
 
--- deriving instance Generic (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin )
--- UniqFM does not export constructor
--- https://hackage-content.haskell.org/package/ghc-9.12.2/docs/GHC-Types-Unique-FM.html
-
-{-
-instance FromJSON (GHC.Types.FM.UniqFM Name GHC.Tc.Utils.TcType.ConcreteTvOrigin) where
-    parseJSON :: Value -> Parser (GHC.Types.FM.UniqFM Name ConcreteTvOrigin)
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
-
-instance FromJSON GHC.Types.Name.Name where
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
--}
 
 deriving instance Generic ProfilingInfo
 instance FromJSON ProfilingInfo
