@@ -136,6 +136,8 @@ import GHC.Core.Coercion.Axiom ( CoAxiom(..), Branched(..),Branches(..),BranchIn
 
 import GHC.Arr (Array(..), array)
 
+import GHC.Types.Tickish ( GenTickish (..)) 
+
 
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -243,8 +245,13 @@ parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
             fail ("Unsupported CmmNode O O tag: " <> unpack other)
 
 
+
+
+--deriving instance Generic (GenTickish 'TickishPassCmmC)
+
 instance FromJSON CmmTickish where
     parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
+
 
 instance FromJSON ForeignTarget where
     parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
@@ -270,71 +277,68 @@ parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
         other ->
             fail ("Unsupported CmmNode C O tag: " <> unpack other)
 
--- | O→C: now handles the two additional simplest cases: CmmSwitch and CmmForeignCall
-parseNodeO_C :: String -> CmmNode O C
-parseNodeO_C "CmmBranch" =
-    CmmBranch (mkHooplLabel 0)
-parseNodeO_C "CmmCondBranch" =
-    CmmCondBranch
-        { cml_pred = error "stub: CmmExpr predicate"
-        , cml_true = mkHooplLabel 0
-        , cml_false = mkHooplLabel 1
-        , cml_likely = Nothing
-        }
-parseNodeO_C "CmmCall" =
-    CmmCall
-        { cml_target = error "stub: CmmExpr target"
-        , cml_cont = Nothing
-        , cml_args_regs = []
-        , cml_args = 0
-        , cml_ret_args = 0
-        , cml_ret_off = 0
-        }
--- added #1
-parseNodeO_C "CmmSwitch" =
-    CmmSwitch (error "stub: CmmExpr scrutinee") (error "stub: SwitchTargets")
--- added #2
-parseNodeO_C "CmmForeignCall" =
-    CmmForeignCall
-        (error "stub: target")
-        (error "stub: results")
-        (error "stub: args")
-        (mkHooplLabel 0)
-        0
-        0
-        False
-parseNodeO_C _ =
-    error "Unsupported CmmNode O C; expected one of {CmmBranch,CmmCondBranch,CmmCall,CmmSwitch,CmmForeignCall}"
-
--- | Open→Open nodes: return the simplest possible value for each tag.
-parseNodeO_O :: String -> CmmNode O O
-parseNodeO_O "CmmComment" = CmmComment (error "stub: FastString")
-parseNodeO_O "CmmTick" = CmmTick (error "stub: CmmTickish")
-parseNodeO_O "CmmUnwind" = CmmUnwind []
-parseNodeO_O "CmmAssign" = CmmAssign (error "stub: CmmReg") (error "stub: CmmExpr")
-parseNodeO_O "CmmStore" = CmmStore (error "stub: addr") (error "stub: rhs") (error "stub: AlignmentSpec")
-parseNodeO_O "CmmUnsafeForeignCall" = CmmUnsafeForeignCall (error "stub: ForeignTarget") [] []
-parseNodeO_O _ = error "Unsupported CmmNode O O"
-
--- import Data.Aeson (withText)
 
 -- | C → O nodes
 instance FromJSON (CmmNode C O) where
     parseJSON = parseNodeC_O_json
 
--- | O → C nodes
-instance FromJSON (CmmNode O C) where
-    parseJSON = withText "CmmNode O C" $ \t ->
-        pure (parseNodeO_C (toString t))
-      where
-        toString = Data.Text.unpack
 
 -- | O → O nodes
 instance FromJSON (CmmNode O O) where
-    parseJSON = withText "CmmNode O O" $ \t ->
-        pure (parseNodeO_O (toString t))
-      where
-        toString = Data.Text.unpack
+    parseJSON = parseNodeO_O_json
+
+
+-- | O → C nodes: parse JSON into real constructors with arguments.
+parseNodeO_C_json :: Value -> Parser (CmmNode O C)
+parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
+  tag <- o .: "tag" :: Parser Text
+  case tag of
+    -- { "tag":"CmmBranch", "label": <Label> }
+    "CmmBranch" -> do
+      lbl <- o .: "label" :: Parser Label
+      pure (CmmBranch lbl)
+
+    -- { "tag":"CmmCondBranch",
+    --   "contents": [ <pred :: CmmExpr>, <true :: Label>, <false :: Label>, <likely :: Maybe Bool> ] }
+    "CmmCondBranch" -> do
+      (p, t, f, lk) <- o .: "contents" :: Parser (CmmExpr, Label, Label, Maybe Bool)
+      pure CmmCondBranch
+            { cml_pred   = p
+            , cml_true   = t
+            , cml_false  = f
+            , cml_likely = lk
+            }
+
+    -- { "tag":"CmmCall",
+    --   "contents": [ <target :: CmmExpr>
+    --               , <cont   :: Maybe Label>
+    --               , <regs   :: [GlobalReg]>
+    --               , <args   :: Int>
+    --               , <retArgs:: Int>
+    --               , <retOff :: Int> ] }
+    "CmmCall" -> do
+      (tgt, mcont, regs, args, retArgs, retOff)
+        <- o .: "contents" :: Parser (CmmExpr, Maybe Label, [GlobalReg], Int, Int, Int)
+      pure CmmCall
+            { cml_target   = tgt
+            , cml_cont     = mcont
+            , cml_args_regs= regs
+            , cml_args     = args
+            , cml_ret_args = retArgs
+            , cml_ret_off  = retOff
+            }
+
+    -- Pendientes: requieren tipos/instancias extra (SwitchTargets, ForeignTarget, CmmFormal/Actual, …)
+    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch no soportado aún (SwitchTargets)."
+    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall no soportado aún (ForeignTarget/[CmmFormal]/[CmmActual])."
+
+    other -> fail ("Unsupported CmmNode O C tag: " <> unpack other)
+
+-- | O → C nodes
+instance FromJSON (CmmNode O C) where
+  parseJSON = parseNodeO_C_json
+
+
 
 -- https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Cmm-Node.html#t:CmmNode
 instance
