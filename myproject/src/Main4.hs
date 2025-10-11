@@ -139,16 +139,6 @@ import GHC.Arr (Array(..), array)
 import GHC.Types.Tickish ( GenTickish (..)) 
 
 
-import Control.Applicative ((<|>))
-import GHC.Types.CostCentre
-  ( CostCentreStack
-  , CostCentre(..)         -- only needed if you decode CostCentre
-  , currentCCS
-  , dontCareCCS
-  , mkSingletonCCS
-  )
-
-
 -- Allow Aeson Generic-based instance at the top level
 deriving instance Generic (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 instance FromJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
@@ -540,38 +530,7 @@ instance FromJSON CmmLit --where
 -- data structures are not all in scope
 
 deriving instance Generic CostCentre
---instance FromJSON CostCentre -- Check Begin and End
-instance FromJSON CostCentre where
-  parseJSON = undefined
-
-
-instance FromJSON CostCentreStack where
-  parseJSON v =
-       parseAsText v
-   <|> parseAsObj  v
-    where
-      -- Accept: "CurrentCCS" / "DontCareCCS"
-      parseAsText :: Value -> Parser CostCentreStack
-      parseAsText = withText "CostCentreStack" $ \t ->
-        case t of
-          "CurrentCCS"  -> pure currentCCS
-          "DontCareCCS" -> pure dontCareCCS
-          other         -> fail $ "Unknown CostCentreStack tag: " <> unpack other
-
-      -- Accept the tagged-object shapes:
-      --   { "tag":"CurrentCCS" }
-      --   { "tag":"DontCareCCS" }
-      --   { "tag":"SingletonCCS", "contents": <CostCentre> }  -- or "cc": <...>
-      parseAsObj :: Value -> Parser CostCentreStack
-      parseAsObj = withObject "CostCentreStack" $ \o -> do
-        tag <- o .: "tag" :: Parser Text
-        case tag of
-          "CurrentCCS"   -> pure currentCCS
-          "DontCareCCS"  -> pure dontCareCCS
-          "SingletonCCS" -> mkSingletonCCS <$> (o .: "contents" <|> o .: "cc")
-          other          -> fail $ "Unknown CostCentreStack tag: " <> unpack other
-
-
+instance FromJSON CostCentre
 
 --deriving instance Generic CostCentreStack
 --instance FromJSON CostCentreStack where
@@ -611,31 +570,26 @@ deriving instance Generic GHC.Types.ForeignCall.CCallTarget
 --    parseJSON =
 --        error "Falla pues"
 
---Begin
-{-
 deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
+--instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 
 instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId) where
     parseJSON =
         error "falla pues"
 
 deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
+--instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 
 deriving instance Generic GHC.Types.FM.UnitId
-instance FromJSON GHC.Types.FM.UnitId
+--instance FromJSON GHC.Types.FM.UnitId
 
 deriving instance Generic GHC.Types.FM.FastString
-instance FromJSON GHC.Types.FM.FastString
+--instance FromJSON GHC.Types.FM.FastString
 
 
-instance FromJSON GHC.Types.FM.FastZString where
-    parseJSON =
-        error "falla pues"
-
--}
---End
+--instance FromJSON GHC.Types.FM.FastZString where
+--    parseJSON =
+--        error "falla pues"
 
 -- deriving instance Generic Data.ByteString.Short.ShortByteString
 instance FromJSON Data.ByteString.Short.ShortByteString
