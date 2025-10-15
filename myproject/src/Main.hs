@@ -9,9 +9,37 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 -- for manual generic implementation
-{-# LANGUAGE TypeOperators #-}
+--{-# LANGUAGE TypeOperators #-}
+
+{-# OPTIONS_GHC -Wno-orphans #-}
+
+
 
 module Main where
+
+
+import qualified GHC.Plugins as GHC.Plugins
+
+import GHC.Types.Unique.DSet ( UniqDSet (..))
+
+import GHC.Data.FastString
+
+import GHC.Types.CostCentre ( CCFlavour) 
+import GHC.Types.CostCentre.State (CostCentreIndex )
+import GHC.Data.Strict ( Maybe(..) )
+
+-- ADD this instead:
+import Data.Primitive.ByteArray
+  ( ByteArray, MutableByteArray
+  , sizeofByteArray, indexByteArray
+  , newByteArray, writeByteArray, unsafeFreezeByteArray)
+import Control.Monad.ST (runST)
+
+
+import Data.Aeson (ToJSON(..), Value(..), object, (.=))
+import Data.Text (Text)
+
+
 
 -- Standard library imports
 import Data.Aeson (FromJSON (..), Value, defaultOptions, genericParseJSON, withObject, withText)
@@ -19,7 +47,7 @@ import Data.Aeson.Types (Parser, (.:), (.:?))
 import qualified Data.ByteString as BS
 import Data.Text
 import qualified Data.Text.Encoding as TE
-import Data.Word (Word64)
+import Data.Word (Word64,Word8)
 
 import Data.Aeson (eitherDecode) -- For testing
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -63,7 +91,7 @@ import GHC.Unit.Types (stringToUnitId)
 
 import GHC.Types.CostCentre (CostCentreStack,  CostCentre(..))
 
-import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily)
+import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily,getKey)
 
 -- import GHC.Runtime.Heap.Layout (SMRep)
 
@@ -79,7 +107,7 @@ import GHC.Types.Name (Name)
 
 import qualified GHC.Plugins as GHC.Types.FM -- debo deprecar esto
 import GHC.Types.Id.Info (IdDetails (..))
-import qualified GHC.Types.Unique.DFM as GHC.Types.FM
+--import qualified GHC.Types.Unique.DFM as GHC.Types.FM
 
 import GHC.Tc.Utils.TcType (ConcreteTvOrigin (..))
 
@@ -165,6 +193,48 @@ instance FromJSON (GenCmmGraph CmmNode)
 
 -- CmmNode is higher-kinded (Extensibility -> Extensibility -> *)
 
+
+instance ToJSON CLabel where
+  toJSON :: CLabel -> Value
+  toJSON lbl =
+    case maybeForeignLabel lbl of
+      Prelude.Just (nameFS, stdcallBytes, src, fod) ->
+        object
+          [ "tag"          .= String "ForeignLabel"
+          , "name"         .= unpackFS nameFS
+          , "stdcallBytes" .= stdcallBytes
+          , "source"       .= encodeFLSrc src
+          , "kind"         .= encodeFOD fod
+          ]
+      Prelude.Nothing ->
+        object [ "_unsupported" .= True
+               , "note" .= String "CLabel variant not handled (only ForeignLabel)"
+               ]
+    where
+      -- You have no direct pattern access to ForeignLabel,
+      -- but GHC.Cmm.CLabel exposes query functions that tell you if it's one.
+      -- If your build of GHC exports `foreignLabelSrc` etc., use those instead.
+      --
+      -- Here we emulate that by falling back to Nothing for non-ForeignLabel.
+
+      maybeForeignLabel
+        :: CLabel -> Prelude.Maybe (FastString, Prelude.Maybe Int, ForeignLabelSource, FunctionOrData)
+      maybeForeignLabel _ = Prelude.Nothing
+      -- Replace with real extractor if available (pattern or accessor).
+
+      encodeFLSrc :: ForeignLabelSource -> Value
+      encodeFLSrc src = case src of
+        ForeignLabelInThisPackage     -> object ["tag" .= String "InThisPackage"]
+        ForeignLabelInExternalPackage -> object ["tag" .= String "InExternalPackage"]
+        --ForeignLabelInPackage uid     -> object ["tag" .= String "InPackage", "unitId" .= Prelude.show uid]
+        ForeignLabelInPackage uid -> object ["tag" .= String "InPackage", "unitId" .= String (pack (GHC.Types.FM.unitIdString uid))]
+
+      encodeFOD :: FunctionOrData -> Text
+      encodeFOD IsFunction = "Function"
+      encodeFOD IsData     = "Data"
+
+
+--https://gitlab.haskell.org/ghc/ghc/-/blob/ghc-9.10.2-release/compiler/GHC/Cmm/CLabel.hs?ref_type=tags
 -- main CLabel parser
 instance FromJSON CLabel where
     parseJSON = withObject "CLabel" $ \o -> do
@@ -222,7 +292,7 @@ deriving instance Generic CmmStackInfo
 instance FromJSON CmmStackInfo
 
 
--- | O → O nodes: parse JSON into real constructors with arguments.
+-- | O â†’ O nodes: parse JSON into real constructors with arguments.
 parseNodeO_O_json :: Value -> Parser (CmmNode O O)
 parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -236,7 +306,7 @@ parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
             pure (CmmTick tick)
 
         "CmmUnwind" -> do
-            regs <- o .: "contents" :: Parser [(GlobalReg, Maybe CmmExpr)]
+            regs <- o .: "contents" :: Parser [(GlobalReg, Prelude.Maybe CmmExpr)]
             pure (CmmUnwind regs)
 
         "CmmAssign" -> do
@@ -269,7 +339,7 @@ instance FromJSON ForeignTarget where
 
 -- needed because of instance FromJSON CmmTopInfo
 
--- C → O: parse a real JSON object
+-- C â†’ O: parse a real JSON object
 -- Accepted shape (minimum):
 --   { "tag": "CmmEntry", "label": <Word64|Label>, "scope": "GlobalScope" }
 -- - "scope" is optional; for now only "GlobalScope" is supported.
@@ -279,27 +349,78 @@ parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
     case tag of
         "CmmEntry" -> do
             lbl <- o .: "label" :: Parser Label
-            mscope <- o .:? "scope" :: Parser (Maybe Text)
+            mscope <- o .:? "scope" :: Parser (Prelude.Maybe Text)
             scope <- case mscope of
-                Nothing -> pure GlobalScope
-                Just "GlobalScope" -> pure GlobalScope
-                Just other -> fail ("Unsupported CmmTickScope: " <> unpack other)
+                Prelude.Nothing -> pure GlobalScope
+                Prelude.Just "GlobalScope" -> pure GlobalScope
+                Prelude.Just other -> fail ("Unsupported CmmTickScope: " <> unpack other)
             pure (CmmEntry lbl scope)
         other ->
             fail ("Unsupported CmmNode C O tag: " <> unpack other)
 
 
--- | C → O nodes
+-- CmmNode C O  (entry node)
+instance ToJSON (CmmNode C O) where
+  toJSON :: CmmNode C O -> Value
+  toJSON (CmmEntry lbl _scope) =
+    -- Your FromJSON only accepts "GlobalScope", so we encode that.
+    object [ "tag"    .= String "CmmEntry"
+           , "label"  .= lbl
+           , "scope"  .= String "GlobalScope"
+           ]
+
+
+-- | C â†’ O nodes
 instance FromJSON (CmmNode C O) where
     parseJSON = parseNodeC_O_json
 
 
--- | O → O nodes
+-- CmmNode O O  (middle nodes)
+instance ToJSON (CmmNode O O) where
+  toJSON :: CmmNode O O -> Value
+  toJSON (CmmComment fs) =
+    -- FromJSON expects Text in "contents" which it turns into FastString via fsLit
+    object [ "tag" .= String "CmmComment"
+           , "contents" .= (String . pack . unpackFS) fs
+           ]
+
+  toJSON (CmmTick tick) =
+    object [ "tag" .= String "CmmTick"
+           , "contents" .= tick
+           ]
+
+  toJSON (CmmUnwind regs) =
+    -- [(GlobalReg, Maybe CmmExpr)]
+    object [ "tag" .= String "CmmUnwind"
+           , "contents" .= regs
+           ]
+
+  toJSON (CmmAssign reg expr) =
+    -- (CmmReg, CmmExpr)
+    object [ "tag" .= String "CmmAssign"
+           , "contents" .= toJSON (reg, expr)
+           ]
+
+  toJSON (CmmStore addr rhs align) =
+    -- (CmmExpr, CmmExpr, AlignmentSpec)
+    object [ "tag" .= String "CmmStore"
+           , "contents" .= toJSON (addr, rhs, align)
+           ]
+
+  toJSON (CmmUnsafeForeignCall tgt results args) =
+    -- (ForeignTarget, [CmmFormal], [CmmActual])
+    -- (where CmmFormal ~ LocalReg, CmmActual ~ CmmExpr)
+    object [ "tag" .= String "CmmUnsafeForeignCall"
+           , "contents" .= toJSON (tgt, results, args)
+           ]
+
+
+-- | O â†’ O nodes
 instance FromJSON (CmmNode O O) where
     parseJSON = parseNodeO_O_json
 
 
--- | O → C nodes: parse JSON into real constructors with arguments.
+-- | O â†’ C nodes: parse JSON into real constructors with arguments.
 parseNodeO_C_json :: Value -> Parser (CmmNode O C)
 parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
   tag <- o .: "tag" :: Parser Text
@@ -312,7 +433,7 @@ parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
     -- { "tag":"CmmCondBranch",
     --   "contents": [ <pred :: CmmExpr>, <true :: Label>, <false :: Label>, <likely :: Maybe Bool> ] }
     "CmmCondBranch" -> do
-      (p, t, f, lk) <- o .: "contents" :: Parser (CmmExpr, Label, Label, Maybe Bool)
+      (p, t, f, lk) <- o .: "contents" :: Parser (CmmExpr, Label, Label, Prelude.Maybe Bool)
       pure CmmCondBranch
             { cml_pred   = p
             , cml_true   = t
@@ -329,7 +450,7 @@ parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
     --               , <retOff :: Int> ] }
     "CmmCall" -> do
       (tgt, mcont, regs, args, retArgs, retOff)
-        <- o .: "contents" :: Parser (CmmExpr, Maybe Label, [GlobalReg], Int, Int, Int)
+        <- o .: "contents" :: Parser (CmmExpr, Prelude.Maybe Label, [GlobalReg], Int, Int, Int)
       pure CmmCall
             { cml_target   = tgt
             , cml_cont     = mcont
@@ -339,15 +460,45 @@ parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
             , cml_ret_off  = retOff
             }
 
-    -- Pendientes: requieren tipos/instancias extra (SwitchTargets, ForeignTarget, CmmFormal/Actual, …)
-    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch no soportado aún (SwitchTargets)."
-    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall no soportado aún (ForeignTarget/[CmmFormal]/[CmmActual])."
+    -- Pendientes: requieren tipos/instancias extra (SwitchTargets, ForeignTarget, CmmFormal/Actual, â€¦)
+    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch no soportado aÃºn (SwitchTargets)."
+    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall no soportado aÃºn (ForeignTarget/[CmmFormal]/[CmmActual])."
 
     other -> fail ("Unsupported CmmNode O C tag: " <> unpack other)
 
--- | O → C nodes
+-- | O â†’ C nodes
 instance FromJSON (CmmNode O C) where
   parseJSON = parseNodeO_C_json
+
+-- CmmNode O C  (last nodes)
+instance ToJSON (CmmNode O C) where
+  toJSON :: CmmNode O C -> Value
+  toJSON (CmmBranch lbl) =
+    object [ "tag"   .= String "CmmBranch"
+           , "label" .= lbl
+           ]
+
+  toJSON CmmCondBranch{ cml_pred = p
+                      , cml_true = t
+                      , cml_false = f
+                      , cml_likely = lk
+                      } =
+    -- (CmmExpr, Label, Label, Maybe Bool)
+    object [ "tag" .= String "CmmCondBranch"
+           , "contents" .= toJSON (p, t, f, lk)
+           ]
+
+  toJSON CmmCall{ cml_target   = tgt
+                , cml_cont     = mcont
+                , cml_args_regs= regs
+                , cml_args     = args
+                , cml_ret_args = retArgs
+                , cml_ret_off  = retOff
+                } =
+    -- (CmmExpr, Maybe Label, [GlobalReg], Int, Int, Int)
+    object [ "tag" .= String "CmmCall"
+           , "contents" .= toJSON (tgt, mcont, regs, args, retArgs, retOff)
+           ]
 
 
 --deriving instance Generic  ( GHC.Cmm.Dataflow.Block.Block CmmNode GHC.Cmm.Dataflow.Block.C GHC.Cmm.Dataflow.Block.C )
@@ -385,6 +536,44 @@ instance
 
       other ->
         fail ("Unsupported Graph' tag: " <> unpack other)
+
+
+
+-- Block C O  (entry node + middle)
+instance ToJSON (Block CmmNode C O) where
+  toJSON :: Block CmmNode C O -> Value
+  toJSON (BlockCO hd BNil) =
+    object [ "tag" .= String "BFirst"
+           , "contents" .= hd
+           ]
+  toJSON (BlockCO hd mid) =
+    object [ "tag" .= String "BHead"
+           , "contents" .= toJSON (hd, mid)
+           ]
+
+
+
+-- Block O O  (pure middle)
+instance ToJSON (Block CmmNode O O) where
+  toJSON :: Block CmmNode O O -> Value
+  toJSON BNil =
+    object [ "tag" .= String "BNil" ]
+  toJSON (BMiddle n) =
+    object [ "tag" .= String "BMiddle"
+           , "contents" .= n
+           ]
+  toJSON (BCat b1 b2) =
+    object [ "tag" .= String "BCat"
+           , "contents" .= toJSON (b1, b2)
+           ]
+  toJSON (BCons n b) =
+    object [ "tag" .= String "BCons"
+           , "contents" .= toJSON (n, b)
+           ]
+  toJSON (BSnoc b n) =
+    object [ "tag" .= String "BSnoc"
+           , "contents" .= toJSON (b, n)
+           ]
 
 
 -- Block C O  (entry node + open-open middle)
@@ -427,6 +616,20 @@ instance FromJSON (Block CmmNode O O) where
       "BSnoc"    -> do (b,n) <- o .: "contents";  pure (BSnoc b n)
       other      -> fail ("Unsupported Block O O tag: " <> unpack other)
 
+
+-- Block O C  (middle + last node)
+instance ToJSON (Block CmmNode O C) where
+  toJSON :: Block CmmNode O C -> Value
+  toJSON (BlockOC BNil lt) =
+    object [ "tag" .= String "BLast"
+           , "contents" .= lt
+           ]
+  toJSON (BlockOC mid lt) =
+    object [ "tag" .= String "BTail"
+           , "contents" .= toJSON (mid, lt)
+           ]
+
+
 -- Block O C  (open-open middle + last node)
 instance FromJSON (Block CmmNode O C) where
   parseJSON = withObject "Block O C" $ \o -> do
@@ -445,9 +648,21 @@ instance FromJSON (Block CmmNode O C) where
       -- { "tag":"BCat", "contents": [ <Block O O>, <Block O C> ] }
       "BCat" -> do
         (b1, b2) <- o .: "contents" :: Parser (Block CmmNode O O, Block CmmNode O C)
-        pure (blockAppend b1 b2)    -- OO + OC → OC
+        pure (blockAppend b1 b2)    -- OO + OC â†’ OC
 
       other -> fail ("Unsupported Block O C tag: " <> unpack other)
+
+
+-- Block C C  (entry + middle + last)
+instance ToJSON (Block CmmNode C C) where
+  toJSON :: Block CmmNode C C -> Value
+  toJSON (BlockCC hd mid lt) =
+    -- Choose the "BHead" shape your parser accepts: (CmmNode C O, Block O C)
+    object [ "tag" .= String "BHead"
+           , "contents" .= toJSON (hd, BlockOC mid lt)
+           ]
+
+
 
 -- Block C C  (entry node + middle OO + last node)
 instance FromJSON (Block CmmNode C C) where
@@ -507,15 +722,41 @@ instance FromJSON (GenCmmStatics 'False) where
 
       other -> fail $ "GenCmmStatics 'False: unknown tag " <> unpack other
 
+
+instance ToJSON (GenCmmStatics 'False) where
+  toJSON :: GenCmmStatics 'False -> Value
+  toJSON (CmmStatics lbl itbl ccs payload nonPtrs) =
+    object [ "tag" .= String "CmmStatics"
+           , "contents" .= toJSON (lbl, itbl, ccs, payload, nonPtrs)
+           ]
+  toJSON (CmmStaticsRaw lbl statics) =
+    object [ "tag" .= String "CmmStaticsRaw"
+           , "contents" .= toJSON (lbl, statics)
+           ]
+
+
 -- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
 -- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
 deriving instance Generic CmmStatic
 instance FromJSON CmmStatic
+instance ToJSON CmmStatic
 
 -- Necessary for CmmStatic instance
 instance FromJSON BS.ByteString where
     parseJSON = withText "ByteString" (pure . TE.encodeUtf8)
 
+instance ToJSON BS.ByteString where
+  toJSON :: BS.ByteString -> Value
+  toJSON bs = String (TE.decodeUtf8 bs)
+
+
+
+instance ToJSON (GenCmmStatics 'True) where
+  toJSON :: GenCmmStatics 'True -> Value
+  toJSON (CmmStaticsRaw lbl statics) =
+    object [ "tag" .= String "CmmStaticsRaw"
+           , "contents" .= toJSON (lbl, statics)
+           ]
 
 -- GenCmmStatics 'True: solo permite CmmStaticsRaw
 instance FromJSON (GenCmmStatics 'True) where
@@ -541,8 +782,37 @@ instance FromJSON CmmLit --where
 
 deriving instance Generic CostCentre
 --instance FromJSON CostCentre -- Check Begin and End
-instance FromJSON CostCentre where
-  parseJSON = undefined
+instance FromJSON CostCentre --where
+--  parseJSON = undefined
+instance ToJSON CostCentre
+
+
+
+-- ==========================
+-- ToJSON for CostCentreStack
+-- ==========================
+instance ToJSON CostCentreStack where
+  toJSON :: CostCentreStack -> Value
+  toJSON ccs
+    | ccs == currentCCS =
+        object ["tag" .= String "CurrentCCS"]
+    | ccs == dontCareCCS =
+        object ["tag" .= String "DontCareCCS"]
+    | otherwise =
+        -- For stacks created via mkSingletonCCS or others carrying a CostCentre
+        -- we must represent them as SingletonCCS <CostCentre>
+        object ["tag" .= String "SingletonCCS", "contents" .= extractCC ccs]
+    where
+      -- Try to project out the CostCentre of a singleton CCS.
+      -- For complex stacks (nested etc.) you'd extend this,
+      -- but mkSingletonCCS builds a 1-element stack, which your FromJSON expects.
+      extractCC :: CostCentreStack -> CostCentre
+      extractCC = currentCostCentre
+        where
+          -- Accessor defined in GHC.Types.CostCentre
+          currentCostCentre = \_ -> error "extractCC: real CostCentre extraction not available in this context"
+          -- If you have `ccsCC :: CostCentreStack -> CostCentre`, use that instead
+
 
 
 instance FromJSON CostCentreStack where
@@ -592,7 +862,9 @@ instance FromJSON CmmInfoTable --where
 instance FromJSON GHC.Types.Var.Var where
     parseJSON _ = fail "dummy"
 
-
+-- Var: FromJSON manual (dummy)
+instance ToJSON GHC.Types.Var.Var where
+  toJSON _ = dummyVal "Var dummy instance"
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
 --instance FromJSON GHC.Types.ForeignCall.ForeignCall
@@ -612,42 +884,204 @@ deriving instance Generic GHC.Types.ForeignCall.CCallTarget
 --        error "Falla pues"
 
 --Begin
-{-
-deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
-instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 
-instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId) where
+{-
+instance ToJSON CCFlavour where
+  toJSON cc = case Prelude.show (toConstr cc) of
+    "CafCC" ->
+      object ["tag" .= String "CafCC"]
+    "IndexedCC" ->
+      case ( cast (gmapQi 0 id cc) :: Prelude.Maybe IndexedCCFlavour
+           , cast (gmapQi 1 id cc) :: Prelude.Maybe CostCentreIndex ) of
+        (Prelude.Just flav, Prelude.Just cci) ->
+          object [ "tag"     .= String "IndexedCC"
+                 , "flavour" .= flav
+                 , "index"   .= unCostCentreIndex cci
+                 ]
+        _ -> object ["tag" .= String "IndexedCC", "error" .= String "unpack-failed"]
+    other -> object ["tag" .= String (T.pack other)]
+-}
+
+--deriving instance Generic GHC.Types.CostCentre.CCFlavour
+instance FromJSON GHC.Types.CostCentre.CCFlavour where
     parseJSON =
         error "falla pues"
+
+
+--Csaba says to alwayys use CafCC to not need Indexed CCflavour
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/src/GHC.Types.CostCentre.html#IndexedCCFlavour
+
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/src/GHC.Types.CostCentre.html#ppFlavourLblComponent
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/src/GHC.Types.CostCentre.html#mkExprCCFlavour
+
+--seems like this type is source annotations cmm can prescind from 
+instance ToJSON GHC.Types.CostCentre.CCFlavour  where
+  toJSON = undefined
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/GHC-Types-CostCentre.html
+
+deriving instance Generic SrcSpan
+instance FromJSON SrcSpan --where
+instance ToJSON SrcSpan
+--   parseJSON =
+--       error "falla pues"
+
+
+deriving instance Generic GHC.Types.FM.UnhelpfulSpanReason
+instance FromJSON GHC.Types.FM.UnhelpfulSpanReason where
+instance ToJSON GHC.Types.FM.UnhelpfulSpanReason where
+--   parseJSON =
+--       error "falla pues"
+
+
+--deriving instance Generic GHC.Types.FM.RealSrcSpan
+instance FromJSON GHC.Types.FM.RealSrcSpan where
+   parseJSON =
+       error "falla pues"
+--looks like something related to source annotations, and thus not strictl necessary?
+instance ToJSON  GHC.Types.FM.RealSrcSpan where
+  toJSON = undefined
+
+
+
+deriving instance Generic (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan)
+instance FromJSON (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan) 
+instance ToJSON (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan) 
+--  where
+--    parseJSON =
+--      error "falla pues"
+
+
+
+
+deriving instance Generic GHC.Types.FM.BufSpan
+instance FromJSON GHC.Types.FM.BufSpan
+instance ToJSON GHC.Types.FM.BufSpan
+--  where
+--    parseJSON =
+--      error "falla pues"
+
+
+deriving instance Generic GHC.Types.FM.BufPos
+instance FromJSON GHC.Types.FM.BufPos
+instance ToJSON GHC.Types.FM.BufPos
+
+--  where
+--    parseJSON =
+--      error "falla pues"
+
+
+
+deriving instance Generic (GHC.Types.FM.GenModule GHC.Types.FM.Unit)
+instance FromJSON (GHC.Types.FM.GenModule GHC.Types.FM.Unit)
+instance ToJSON (GHC.Types.FM.GenModule GHC.Types.FM.Unit) 
+
+deriving instance Generic GHC.Types.FM.ModuleName
+instance FromJSON GHC.Types.FM.ModuleName
+instance ToJSON GHC.Types.FM.ModuleName
+--  where
+--    parseJSON =
+--        error "falla pues"
+
+
+deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
+instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
+instance ToJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
+--  where
+--    parseJSON =
+--        error "falla pues"
+
+
+deriving instance Generic (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
+instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
+instance ToJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
+
+--  where
+--    parseJSON =
+--        error "falla pues"
+
+
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/src/GHC.Types.Unique.DSet.html#UniqDSet
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/Language-Haskell-Syntax-Module-Name.html#t:ModuleName
+--deriving instance Generic (GHC.Types.Unique.DSet.UniqDSet GHC.Types.FM.ModuleName)
+--deriving Generic not possible
+
+instance FromJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
+  parseJSON = undefined
+    
+
+instance ToJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
+  toJSON = undefined
 
 deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
+instance ToJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
+--  where
+--    parseJSON =
+--        error "falla pues"
 
 deriving instance Generic GHC.Types.FM.UnitId
 instance FromJSON GHC.Types.FM.UnitId
+instance ToJSON GHC.Types.FM.UnitId
 
 deriving instance Generic GHC.Types.FM.FastString
 instance FromJSON GHC.Types.FM.FastString
+instance ToJSON GHC.Types.FM.FastString
 
 
-instance FromJSON GHC.Types.FM.FastZString where
-    parseJSON =
-        error "falla pues"
+-- FromJSON/ToJSON para el FastZString de GHC (tipo abstracto)
+instance FromJSON FastZString where
+  parseJSON = withText "FastZString" $ \t ->
+    -- Text -> UTF-8 ByteString -> FastString -> (Z-encode) -> FastZString
+    pure (zEncodeFS (mkFastStringByteString (TE.encodeUtf8 t)))
 
--}
+instance ToJSON FastZString where
+  toJSON fzs =
+    -- zString :: FastZString -> String
+    -- lo empaquetamos como Text para emitir un JSON string
+    String (pack (zString fzs))
+
 --End
 
 -- deriving instance Generic Data.ByteString.Short.ShortByteString
 instance FromJSON Data.ByteString.Short.ShortByteString
+instance ToJSON Data.ByteString.Short.ShortByteString
 
 
+--instance FromJSON ByteArray where
+--    parseJSON =
+--        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificaciÃ³n manual usando mk*Name."
+-- Encode as [Word8]
+-- Decode: [Word8] -> ByteArray
 instance FromJSON ByteArray where
-    parseJSON =
-        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificación manual usando mk*Name."
+  parseJSON v = do
+    ws <- (parseJSON v :: Parser [Word8])
+    Prelude.pure $ runST $ do
+      let n = Prelude.length ws
+      mba <- newByteArray n
+      let fill i []     = Prelude.pure ()
+          fill i (x:xs) = writeByteArray mba i x >> fill (i Prelude.+ 1) xs
+      fill 0 ws
+      unsafeFreezeByteArray mba
 
+-- ToJSON: ByteArray -> [Word8]
+instance ToJSON ByteArray where
+  toJSON :: ByteArray -> Value
+  toJSON ba =
+    let n :: Int
+        n = sizeofByteArray ba
+
+        go :: Int -> [Word8] -> [Word8]
+        go i acc
+          | i Prelude.< n = go (i Prelude.+ 1) (indexByteArray ba i : acc)
+          | Prelude.otherwise = Prelude.reverse acc
+
+        bytes :: [Word8]
+        bytes = go 0 []
+    in toJSON bytes
 
 deriving instance Generic ProfilingInfo
 instance FromJSON ProfilingInfo
+--instance ToJSON ProfilingInfo
 
 deriving instance Generic GHC.Runtime.Heap.Layout.SMRep
 instance FromJSON GHC.Runtime.Heap.Layout.SMRep
@@ -660,6 +1094,7 @@ instance FromJSON GHC.Runtime.Heap.Layout.ArgDescr
 
 deriving instance Generic CmmExpr
 instance FromJSON CmmExpr
+instance ToJSON CmmExpr
 
 deriving instance Generic MachOp
 instance FromJSON MachOp
@@ -682,25 +1117,35 @@ instance FromJSON GlobalRegUse
 deriving instance Generic LocalReg
 instance FromJSON LocalReg
 
--- Emulación del derivado genérico para: newtype Unique = MkUnique Word64
+-- Emulacion del derivado genÃ©rico para: newtype Unique = MkUnique Word64
 -- Se decodifica exactamente como Word64 y luego se construye el Unique.
 instance FromJSON GHC.Types.Unique.Unique where
     parseJSON v =
         (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
 --is this used by something in a cmm module?
 
+-- | Encode a Unique as the underlying numeric key.
+instance ToJSON GHC.Types.Unique.Unique where
+  toJSON :: GHC.Types.Unique.Unique -> Value
+  toJSON u =
+    -- getKey :: Unique -> Int  (exported)
+    -- Emit as Word64 to match your FromJSON that uses mkUniqueGrimily :: Word64 -> Unique
+    toJSON (fromIntegral (GHC.Types.Unique.getKey u) :: Word64)
+
+
+
 -- reemplaza tu main por este
 main :: IO ()
 main = do
     putStrLn "== CmmNode C O JSON tests =="
 
-    -- 1) OK: objeto válido
+    -- 1) OK: objeto vÃ¡lido
     let ok = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"GlobalScope\"}"
     test "OK (object with tag/label/scope)" ok
 
     -- 2) OK sin scope (usa GlobalScope por defecto)
     let okNoScope = "{\"tag\":\"CmmEntry\",\"label\":1}"
-    test "OK (object without scope → defaults to GlobalScope)" okNoScope
+    test "OK (object without scope â†’ defaults to GlobalScope)" okNoScope
 
     -- 3) Falla: scope no soportado
     let badScope = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"LocalScope\"}"
@@ -714,17 +1159,17 @@ main = do
     let missingLabel = "{\"tag\":\"CmmEntry\"}"
     test "FAIL (missing label)" missingLabel
 
-    -- 6) Falla: string “legacy” (ya no aceptamos Text puro)
+    -- 6) Falla: string â€œlegacyâ€ (ya no aceptamos Text puro)
     let legacy = "\"CmmEntry\""
     test "FAIL (string form no longer accepted)" legacy
 
     putStrLn "== Done =="
   where
     test msg js = do
-        putStrLn $ "→ " <> msg
+        putStrLn $ "â†’ " <> msg
         case eitherDecode @(CmmNode C O) (LBS.pack js) of
             Right _ -> putStrLn "   decoded: OK"
-            Left e -> putStrLn $ "   decoded: ERROR → " <> e
+            Left e -> putStrLn $ "   decoded: ERROR â†’ " <> e
 
 -- ===== FromJSON for CmmType (emulating genericParseJSON defaultOptions) =====
 -- JSON shape expected (TaggedObject):
@@ -788,3 +1233,199 @@ instance FromJSON CmmType where
         build OGcPtr _ =
             -- Requires a Platform to construct (gcWord). Provide a Platform-aware parser if needed.
             fail "GcPtrCat requires a Platform (use a Platform-aware parser to call gcWord)."
+
+
+--------------------------------------------------------------------------------
+-- ToJSON instances (FINAL) — respeta tu regla automática/dummy
+-- Pegar exactamente al final de Main.hs
+--------------------------------------------------------------------------------
+
+-- Helper para dummies
+dummyVal :: Text -> Value
+dummyVal msg = object ["_dummy" .= True, "note" .= msg]
+
+--------------------------------------------------------------------------------
+-- AUTOMÁTICAS: tipos con (deriving Generic ..) + (instance FromJSON ..) en TU archivo
+--   → instancia vacía `instance ToJSON …` (Aeson usa Generic por default)
+--------------------------------------------------------------------------------
+
+instance ToJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
+instance ToJSON CmmTopInfo
+instance ToJSON (GenCmmGraph CmmNode)
+instance ToJSON GlobalReg
+instance ToJSON Section
+instance ToJSON CmmStackInfo
+instance ToJSON SectionType
+--instance ToJSON CmmStatic
+instance ToJSON CmmLit
+instance ToJSON CmmInfoTable
+instance ToJSON ProfilingInfo
+instance ToJSON GHC.Runtime.Heap.Layout.SMRep
+instance ToJSON ClosureTypeInfo
+instance ToJSON GHC.Runtime.Heap.Layout.ArgDescr
+--instance ToJSON CmmExpr
+instance ToJSON MachOp
+instance ToJSON FMASign
+instance ToJSON AlignmentSpec
+instance ToJSON Area
+instance ToJSON CmmReg
+instance ToJSON GlobalRegUse
+instance ToJSON LocalReg
+
+--------------------------------------------------------------------------------
+-- DUMMY: tipos con FromJSON MANUAL en TU archivo
+-- (incluye además los necesarios para resolver campos internos de las automáticas)
+--------------------------------------------------------------------------------
+
+-- LabelMap: tienes FromJSON manual [(Word64,a)] -> LabelMap a
+instance ToJSON a => ToJSON (LabelMap a) where
+  toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
+
+-- ByteString: FromJSON manual en tu archivo
+--instance ToJSON BS.ByteString where
+--  toJSON :: BS.ByteString -> Value
+--  toJSON _ = dummyVal "ByteString dummy instance"
+
+-- ShortByteString: declaraste FromJSON; damos ToJSON dummy
+--instance ToJSON Data.ByteString.Short.ShortByteString where
+--  toJSON _ = dummyVal "ShortByteString dummy instance"
+
+-- CLabel: FromJSON manual
+--instance ToJSON CLabel where
+--  toJSON _ = dummyVal "CLabel dummy instance"
+
+-- Label: FromJSON manual (Word64 -> mkHooplLabel)
+instance ToJSON Label where
+  toJSON _ = dummyVal "Label dummy instance"
+
+-- CostCentre / CostCentreStack: FromJSON manual/indefinido
+--instance ToJSON CostCentre where
+--  toJSON _ = dummyVal "CostCentre dummy instance"
+
+--instance ToJSON CostCentreStack where
+--  toJSON _ = dummyVal "CostCentreStack dummy instance"
+
+-- Var: FromJSON manual (dummy)
+--instance ToJSON GHC.Types.Var.Var where
+--  toJSON _ = dummyVal "Var dummy instance"
+
+-- CmmTickish / ForeignTarget: FromJSON dummy
+instance ToJSON CmmTickish where
+  toJSON _ = dummyVal "CmmTickish dummy instance"
+
+instance ToJSON ForeignTarget where
+  toJSON _ = dummyVal "ForeignTarget dummy instance"
+
+-- Graph' Block CmmNode C C: FromJSON manual
+--instance ToJSON (Graph' Block CmmNode C C) where
+--  toJSON _ = dummyVal "Graph' Block CmmNode C C dummy instance"
+
+-- Blocks: FromJSON manual (todas las variantes)
+--instance ToJSON (Block CmmNode C O) where
+-- toJSON _ = dummyVal "Block C O dummy instance"
+
+--instance ToJSON (Block CmmNode O O) where
+-- toJSON _ = dummyVal "Block O O dummy instance"
+
+
+
+
+
+--instance ToJSON (Block CmmNode O C) where
+--  toJSON _ = dummyVal "Block O C dummy instance"
+
+--instance ToJSON (Block CmmNode C C) where
+--  toJSON _ = dummyVal "Block C C dummy instance"
+
+-- CmmNode: FromJSON manual (todas las variantes)
+--instance ToJSON (CmmNode C O) where
+--  toJSON _ = dummyVal "CmmNode C O dummy instance"
+
+--instance ToJSON (CmmNode O O) where
+--  toJSON _ = dummyVal "CmmNode O O dummy instance"
+
+--instance ToJSON (CmmNode O C) where
+--  toJSON _ = dummyVal "CmmNode O C dummy instance"
+
+
+-- GenCmmStatics 'False / 'True: FromJSON manual
+--instance ToJSON (GenCmmStatics 'False) where
+--  toJSON :: GenCmmStatics False -> Value
+--  toJSON _ = dummyVal "GenCmmStatics 'False dummy instance"
+
+--instance ToJSON (GenCmmStatics 'True) where
+--  toJSON _ = dummyVal "GenCmmStatics 'True dummy instance"
+
+
+
+
+-- Unique: FromJSON manual (Word64 -> mkUniqueGrimily)
+--instance ToJSON GHC.Types.Unique.Unique where
+--  toJSON _ = dummyVal "Unique dummy instance"
+
+-- ByteArray: FromJSON manual (error/dummy)
+--instance ToJSON ByteArray where
+--  toJSON _ = dummyVal "ByteArray dummy instance"
+
+-- CmmType y auxiliares: FromJSON manual
+instance ToJSON CmmCatOpen where
+  toJSON _ = dummyVal "CmmCatOpen dummy instance"
+
+instance ToJSON Width where
+  toJSON _ = dummyVal "Width dummy instance"
+
+instance ToJSON CmmType where
+  toJSON _ = dummyVal "CmmType dummy instance"
+
+
+-- ==============================================
+-- ToJSON for Graph' Block CmmNode C C (closed/closed)
+-- Mirrors the manual FromJSON that accepts only:
+--   { "tag":"GMany"
+--   , "contents": [ <_entry :: Block O C>         -- ignored by parser
+--                 , <body   :: LabelMap (Block C C)>
+--                 , <_exit  :: Block C O> ] }     -- ignored by parser
+-- ==============================================
+instance ToJSON (Graph' Block CmmNode C C) where
+  toJSON :: Graph' Block CmmNode C C -> Value
+  toJSON (GMany _ bodyCC _) =
+    object
+      [ "tag"      .= String "GMany"
+      , "contents" .= toJSON (dummyEntryOC, encodeBody bodyCC, dummyExitCO)
+      ]
+    where
+      -- The FromJSON *parses* entry/exit but then discards them for C/C graphs.
+      -- We therefore emit minimal, well-formed placeholders that your existing
+      -- Block/CmmNode decoders will accept.
+
+      -- Block O C  ≈  { "tag":"BLast", "contents": <CmmNode O C> }
+      -- CmmNode O C ≈ { "tag":"CmmBranch", "label": <Word64> }
+      dummyEntryOC :: Value
+      dummyEntryOC =
+        object
+          [ "tag"      .= String "BLast"
+          , "contents" .= object
+              [ "tag"   .= String "CmmBranch"
+              , "label" .= (0 :: Word64)
+              ]
+          ]
+
+      -- Block C O  ≈  { "tag":"BFirst", "contents": <CmmNode C O> }
+      -- CmmNode C O ≈ { "tag":"CmmEntry", "label": <Word64>, "scope":"GlobalScope" }
+      dummyExitCO :: Value
+      dummyExitCO =
+        object
+          [ "tag"      .= String "BFirst"
+          , "contents" .= object
+              [ "tag"   .= String "CmmEntry"
+              , "label" .= (0 :: Word64)
+              , "scope" .= String "GlobalScope"
+              ]
+          ]
+
+      -- Your FromJSON for LabelMap expects a JSON list of pairs [(Word64, a)].
+      -- We don’t currently have a Label -> Word64 projector, so we serialize an
+      -- empty body (information-losing but valid). When you expose a projector
+      -- (e.g., labelUnique :: Label -> Word64) and a mapToList, replace this.
+      encodeBody :: LabelMap (Block CmmNode C C) -> Value
+      encodeBody _ = toJSON ([] :: [(Word64, Value)])
