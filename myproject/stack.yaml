@@ -17,8 +17,11 @@
 #
 # snapshot: ./custom-snapshot.yaml
 # snapshot: https://example.com/snapshots/2024-01-01.yaml
-snapshot:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/2.yaml
+#snapshot:
+#  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/2.yaml
+
+resolver: lts-24.16
+allow-newer: true
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -70,3 +73,6 @@ extra-deps:
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
+compiler:       ghc-9.10.3
+compiler-check: match-exact

@@ -17,8 +17,18 @@
 
 module Main where
 
+import Data.Aeson (ToJSON(..))
+import Data.Word (Word64)
+
+-- API pública de Cmm/Hoopl dentro de GHC:
+import GHC.Cmm.Dataflow.Label (Label, LabelMap, mapToList)
+import GHC.Types.Unique         (getUnique, getKey)
+
 
 import qualified GHC.Plugins as GHC.Plugins
+
+import GHC.Cmm.Type (CmmType, typeWidth, isGcPtrType, isFloatType)
+
 
 import GHC.Types.Unique.DSet ( UniqDSet (..))
 
@@ -275,6 +285,28 @@ instance FromJSON Section
 
 -- These instances are needed for CmmTopInfos
 
+-- LabelMap: tienes FromJSON manual [(Word64,a)] -> LabelMap a
+--instance ToJSON a => ToJSON (LabelMap a) where
+--  toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
+
+-- LabelMap: ToJSON correcto, empata con tu FromJSON [(Word64,a)] -> LabelMap a
+{-instance ToJSON a => ToJSON (LabelMap a) where
+  toJSON lm =
+    toJSON [ (labelToWord64 l, v) | (l, v) <- mapToList lm ]
+    where
+      -- Label -> Word64 usando el Unique interno
+      labelToWord64 :: Label -> Word64
+      labelToWord64 = fromIntegral . getKey . labelToUnique
+-}
+
+-- Label -> Word64, usando solo proyectores públicos
+labelToWord64 :: Label -> Word64
+labelToWord64 = fromIntegral . getKey . getUnique
+
+-- Serializa como [(Word64, a)] para espejar tu FromJSON manual
+instance ToJSON a => ToJSON (LabelMap a) where
+  toJSON lm = toJSON [ (labelToWord64 l, v) | (l, v) <- mapToList lm ]
+
 -- JSON como lista de pares [(Word64, a)] -> LabelMap a
 instance (FromJSON a) => FromJSON (LabelMap a) where
     parseJSON v = do
@@ -329,13 +361,25 @@ parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
 
 --deriving instance Generic (GenTickish 'TickishPassCmmC)
 
+-- CmmTickish / ForeignTarget: FromJSON dummy
+instance ToJSON CmmTickish where
+--  toJSON _ = dummyVal "CmmTickish dummy instance"
+  toJSON _ = undefined
+
 instance FromJSON CmmTickish where
-    parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
+--parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
+  parseJSON _ = undefined 
 
 --This two seem like instances i dont have to handle
 
+
+instance ToJSON ForeignTarget where
+--  toJSON _ = dummyVal "ForeignTarget dummy instance"
+  toJSON _ = undefined
+
 instance FromJSON ForeignTarget where
-    parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
+    --parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
+    parseJSON _ = undefined 
 
 -- needed because of instance FromJSON CmmTopInfo
 
@@ -696,6 +740,13 @@ instance FromJSON (Block CmmNode C C) where
 
 ---Needed for GenCmmGraph CmmNode
 
+
+
+
+instance ToJSON Label where
+  toJSON     = toJSON . labelToWord64
+  toEncoding = toEncoding . labelToWord64
+
 instance FromJSON Label where
     parseJSON v = mkHooplLabel <$> (parseJSON v :: Parser Word64)
 
@@ -864,7 +915,8 @@ instance FromJSON GHC.Types.Var.Var where
 
 -- Var: FromJSON manual (dummy)
 instance ToJSON GHC.Types.Var.Var where
-  toJSON _ = dummyVal "Var dummy instance"
+  --toJSON _ = dummyVal "Var dummy instance"
+    toJSON = undefined 
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
 --instance FromJSON GHC.Types.ForeignCall.ForeignCall
@@ -1190,7 +1242,24 @@ data CmmCatOpen
     | OVec Int CmmCatOpen
     deriving (Show, Eq)
 
+
+-- CmmType y auxiliares: ToJSON manual (complementa tu FromJSON)
+instance ToJSON CmmCatOpen where
+  toJSON :: CmmCatOpen -> Value
+  toJSON cat = case cat of
+    OGcPtr ->
+      object [ "tag" .= String "GcPtrCat" ]
+    OBits ->
+      object [ "tag" .= String "BitsCat" ]
+    OFloat ->
+      object [ "tag" .= String "FloatCat" ]
+    OVec n sub ->
+      object [ "tag" .= String "VecCat"
+             , "contents" .= toJSON (n, sub)
+             ]
+
 instance FromJSON CmmCatOpen where
+    parseJSON :: Value -> Parser CmmCatOpen
     parseJSON = withObject "CmmCat" $ \o -> do
         tag <- o .: "tag" :: Parser Text
         case tag of
@@ -1202,6 +1271,18 @@ instance FromJSON CmmCatOpen where
                 (n, sub) <- Data.Aeson.parseJSON cs :: Parser (Int, CmmCatOpen)
                 pure (OVec n sub)
             other -> fail ("Unknown CmmCat tag: " <> unpack other)
+
+
+instance ToJSON Width where
+  toJSON :: Width -> Value
+  toJSON w = case w of
+    W8   -> object ["tag" .= String "W8"]
+    W16  -> object ["tag" .= String "W16"]
+    W32  -> object ["tag" .= String "W32"]
+    W64  -> object ["tag" .= String "W64"]
+    W128 -> object ["tag" .= String "W128"]
+    W256 -> object ["tag" .= String "W256"]
+    W512 -> object ["tag" .= String "W512"]
 
 instance FromJSON Width where
     parseJSON = withObject "Width" $ \o -> do
@@ -1216,23 +1297,88 @@ instance FromJSON Width where
             "W512" -> pure W512
             other -> fail ("Unknown Width tag: " <> unpack other)
 
+--https://hackage-content.haskell.org/package/ghc-9.10.2/docs/src/GHC.Cmm.Type.html
+
+
+-- Needed (if not already):
+-- import GHC.Cmm.Type
+--   ( CmmType, Width(..)
+--   , typeWidth, isGcPtrType, isFloatType, isBitsType
+--   , isVecType, vecLength, vecElemType
+--   , cmmBits, cmmFloat, vec
+--   )
+-- import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, withObject, (.:))
+-- import Data.Aeson.Types (Parser)
+-- import Data.Text (Text)
+-- import qualified Data.Text as T
+
+-- Shape we emit/consume:
+-- { "tag":"CmmType"
+-- , "contents": [ <CmmCatOpen>, <Width> ]
+-- }
+-- where CmmCatOpen is:
+--   { "tag":"BitsCat" }
+--   { "tag":"FloatCat" }
+--   { "tag":"GcPtrCat" }              -- decode needs Platform (see note)
+--   { "tag":"VecCat", "contents":[ <len :: Int>, <sub :: CmmCatOpen> ] }
+
+-- Your open mirror (already in your file)
+-- data CmmCatOpen = OGcPtr | OBits | OFloat | OVec Int CmmCatOpen
+
+-- ===== ToJSON =====
+instance ToJSON CmmType where
+  toJSON :: CmmType -> Value
+  toJSON ty
+    | isVecType ty =
+        let n   = vecLength ty
+            ety = vecElemType ty
+            w   = typeWidth ty
+            cat = toOpen ety  -- category of the element type
+        in object [ "tag"      .= String "CmmType"
+                  , "contents" .= toJSON (OVec n cat, w)
+                  ]
+    | isFloatType ty =
+        object [ "tag"      .= String "CmmType"
+               , "contents" .= toJSON (OFloat, typeWidth ty)
+               ]
+    | isGcPtrType ty =
+        object [ "tag"      .= String "CmmType"
+               , "contents" .= toJSON (OGcPtr, typeWidth ty)
+               ]
+    | otherwise {- isBitsType ty -} =
+        object [ "tag"      .= String "CmmType"
+               , "contents" .= toJSON (OBits, typeWidth ty)
+               ]
+    where
+      -- Encode only the *category* for an element type; its width comes
+      -- from the outer 'typeWidth ty' (same convention as your FromJSON).
+      toOpen :: CmmType -> CmmCatOpen
+      toOpen et
+        | isVecType et   = OVec (vecLength et) (toOpen (vecElemType et))
+        | isFloatType et = OFloat
+        | isGcPtrType et = OGcPtr
+        | otherwise      = OBits
+
+-- ===== FromJSON =====
 instance FromJSON CmmType where
-    parseJSON = withObject "CmmType" $ \o -> do
-        tag <- o .: "tag" :: Parser Text
-        case tag of
-            "CmmType" -> do
-                cs <- o .: "contents"
-                (cat, w) <- parseJSON cs :: Parser (CmmCatOpen, Width)
-                build cat w
-            other -> fail ("Expected tag CmmType, got: " <> unpack other)
-      where
-        build :: CmmCatOpen -> Width -> Parser CmmType
-        build OBits w = pure (cmmBits w)
-        build OFloat w = pure (cmmFloat w)
-        build (OVec n c) w = vec n <$> build c w
-        build OGcPtr _ =
-            -- Requires a Platform to construct (gcWord). Provide a Platform-aware parser if needed.
-            fail "GcPtrCat requires a Platform (use a Platform-aware parser to call gcWord)."
+  parseJSON = withObject "CmmType" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmType" -> do
+        (cat, w) <- o .: "contents" :: Parser (CmmCatOpen, Width)
+        build cat w
+      other -> fail ("Expected tag CmmType, got: " <> unpack other)
+    where
+      build :: CmmCatOpen -> Width -> Parser CmmType
+      build OBits w       = pure (cmmBits w)
+      build OFloat w      = pure (cmmFloat w)
+      build (OVec n c) w  = vec n <$> build c w
+      -- NOTE: Cmm GC-pointer requires a Platform (gcWord :: Platform -> CmmType).
+      -- If you have a Platform at hand, replace this failure with:
+      --   pure (setCmmTypeWidth w (gcWord platform))
+      build OGcPtr _      = fail "CmmType: decoding GcPtrCat requires Platform (use a Platform-aware parser)"
+
+
 
 
 --------------------------------------------------------------------------------
@@ -1241,8 +1387,8 @@ instance FromJSON CmmType where
 --------------------------------------------------------------------------------
 
 -- Helper para dummies
-dummyVal :: Text -> Value
-dummyVal msg = object ["_dummy" .= True, "note" .= msg]
+--dummyVal :: Text -> Value
+--dummyVal msg = object ["_dummy" .= True, "note" .= msg]
 
 --------------------------------------------------------------------------------
 -- AUTOMÁTICAS: tipos con (deriving Generic ..) + (instance FromJSON ..) en TU archivo
@@ -1278,8 +1424,8 @@ instance ToJSON LocalReg
 --------------------------------------------------------------------------------
 
 -- LabelMap: tienes FromJSON manual [(Word64,a)] -> LabelMap a
-instance ToJSON a => ToJSON (LabelMap a) where
-  toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
+--instance ToJSON a => ToJSON (LabelMap a) where
+--toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
 
 -- ByteString: FromJSON manual en tu archivo
 --instance ToJSON BS.ByteString where
@@ -1295,8 +1441,8 @@ instance ToJSON a => ToJSON (LabelMap a) where
 --  toJSON _ = dummyVal "CLabel dummy instance"
 
 -- Label: FromJSON manual (Word64 -> mkHooplLabel)
-instance ToJSON Label where
-  toJSON _ = dummyVal "Label dummy instance"
+--instance ToJSON Label where
+ -- toJSON _ = dummyVal "Label dummy instance"
 
 -- CostCentre / CostCentreStack: FromJSON manual/indefinido
 --instance ToJSON CostCentre where
@@ -1310,11 +1456,11 @@ instance ToJSON Label where
 --  toJSON _ = dummyVal "Var dummy instance"
 
 -- CmmTickish / ForeignTarget: FromJSON dummy
-instance ToJSON CmmTickish where
-  toJSON _ = dummyVal "CmmTickish dummy instance"
+--instance ToJSON CmmTickish where
+--toJSON _ = dummyVal "CmmTickish dummy instance"
 
-instance ToJSON ForeignTarget where
-  toJSON _ = dummyVal "ForeignTarget dummy instance"
+--instance ToJSON ForeignTarget where
+--toJSON _ = dummyVal "ForeignTarget dummy instance"
 
 -- Graph' Block CmmNode C C: FromJSON manual
 --instance ToJSON (Graph' Block CmmNode C C) where
@@ -1356,8 +1502,9 @@ instance ToJSON ForeignTarget where
 --instance ToJSON (GenCmmStatics 'True) where
 --  toJSON _ = dummyVal "GenCmmStatics 'True dummy instance"
 
-
-
+-- Label: FromJSON manual (Word64 -> mkHooplLabel)
+--instance ToJSON Label where
+--  toJSON _ = dummyVal "Label dummy instance"
 
 -- Unique: FromJSON manual (Word64 -> mkUniqueGrimily)
 --instance ToJSON GHC.Types.Unique.Unique where
@@ -1368,14 +1515,14 @@ instance ToJSON ForeignTarget where
 --  toJSON _ = dummyVal "ByteArray dummy instance"
 
 -- CmmType y auxiliares: FromJSON manual
-instance ToJSON CmmCatOpen where
-  toJSON _ = dummyVal "CmmCatOpen dummy instance"
+--instance ToJSON CmmCatOpen where
+ --toJSON _ = dummyVal "CmmCatOpen dummy instance"
 
-instance ToJSON Width where
-  toJSON _ = dummyVal "Width dummy instance"
+--instance ToJSON Width where
+ --toJSON _ = dummyVal "Width dummy instance"
 
-instance ToJSON CmmType where
-  toJSON _ = dummyVal "CmmType dummy instance"
+--instance ToJSON CmmType where
+--toJSON _ = dummyVal "CmmType dummy instance"
 
 
 -- ==============================================
