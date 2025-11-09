@@ -1,0 +1,9 @@
+resolver: lts-24.18
+allow-newer: true
+
+packages:
+  - .
+
+# cmm-plugin currently relies on GHC 9.13s plugin API
+compiler:       ghc-9.10.3
+compiler-check: match-exact

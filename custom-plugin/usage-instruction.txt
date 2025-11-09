@@ -1,0 +1,13 @@
+-Run stack build under cmm-plugin
+
+- Run  ( find . -type f -name "libcmm-plugin.so" )  under cmm-plugin . Use the output to replace
+the path at the end of the stack file in plugin-tester2
+
+-Run stack build under plugin-tester2
+
+Note: This last step compiles the code under plugin-tester2 with the plugin defined by cmm-plugin. The plugin 
+converts all Cmm variables to json and the attempts to convert them back into Cmm ( see stgToCmmFun in plugin.hs )
+Depending on the setup the serialization and deserialization ( also called serde by this project ) Should either fail
+or succeed but the result make GHC crash.
+Some types are incomplete. 
+
