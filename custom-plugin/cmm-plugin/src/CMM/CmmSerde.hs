@@ -28,14 +28,14 @@ import GHC.Types.Id.Info          (IdDetails(VanillaId), vanillaIdInfo)
 import GHC.Types.Name             (mkSystemName)
 import GHC.Types.Name.Occurrence  (mkVarOcc)
 import GHC.Types.Unique           (mkUniqueGrimily)
-import GHC.Builtin.Types          (unitTy)   -- un tipo levantado (lifted), simple y seguro
+import GHC.Builtin.Types          (unitTy)  -- a lifted type
 --being imported for defaultVar
 
 
 import Data.Aeson (ToJSON(..))
 import Data.Word (Word64)
 
--- API pública de Cmm/Hoopl dentro de GHC:
+-- Cmm/Hoopl public api inside GHC
 import GHC.Cmm.Dataflow.Label (Label, LabelMap, mapToList)
 import GHC.Types.Unique         (getUnique, getKey)
 
@@ -133,7 +133,8 @@ import GHC.Core.TyCo.Rep (Mult, Type)
 import GHC.Types.Id.Info (IdDetails, IdInfo, vanillaIdInfo)
 import GHC.Types.Name (Name)
 
-import qualified GHC.Plugins as GHC.Types.FM -- this should be deprecated
+import qualified GHC.Plugins as GHC.Types.FM -- this should be deprecated, i 
+-- have better, more specific ways to import what is exported there
 import GHC.Types.Id.Info (IdDetails (..))
 
 
@@ -152,7 +153,7 @@ import GHC.Types.Name (
     setNameLoc,
  )
 
--- Piezas requeridas por esos ctors
+
 import GHC.Types.Name.Occurrence (OccName, mkOccName, mkTcOcc, mkVarOcc)
 import GHC.Types.SrcLoc (SrcSpan, noSrcSpan, RealSrcSpan , mkRealSrcLoc , mkRealSrcSpan)
 import GHC.Types.Unique (Unique)
@@ -234,7 +235,7 @@ instance ToJSON CLabel where
                , "note" .= String "CLabel variant not handled (only ForeignLabel)"
                ]
     where
-      -- You have no direct pattern access to ForeignLabel,
+      -- There is no direct pattern access to ForeignLabel,
       -- but GHC.Cmm.CLabel exposes query functions that tell you if it's one.
       -- If your build of GHC exports `foreignLabelSrc` etc., use those instead.
       --
@@ -296,23 +297,8 @@ instance FromJSON GlobalReg
 deriving instance Generic Section
 instance FromJSON Section
 
--- These instances are needed for CmmTopInfos
+-- LabelMap instances are needed for CmmTopInfos
 
--- LabelMap: tienes FromJSON manual [(Word64,a)] -> LabelMap a
---instance ToJSON a => ToJSON (LabelMap a) where
---  toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
-
--- LabelMap: ToJSON correcto, empata con tu FromJSON [(Word64,a)] -> LabelMap a
-{-instance ToJSON a => ToJSON (LabelMap a) where
-  toJSON lm =
-    toJSON [ (labelToWord64 l, v) | (l, v) <- mapToList lm ]
-    where
-      -- Label -> Word64 usando el Unique interno
-      labelToWord64 :: Label -> Word64
-      labelToWord64 = fromIntegral . getKey . labelToUnique
--}
-
--- Label -> Word64, usando solo proyectores públicos
 labelToWord64 :: Label -> Word64
 labelToWord64 = fromIntegral . getKey . getUnique
 
@@ -327,7 +313,7 @@ instance (FromJSON a) => FromJSON (LabelMap a) where
         pairs <-
             mapM
                 ( \(w, val) -> do
-                    x <- parseJSON val -- x :: a (se infiere por el 'a' del instance)
+                    x <- parseJSON val
                     pure (mkHooplLabel w, x)
                 )
                 ps
@@ -556,9 +542,9 @@ parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
             , cml_ret_off  = retOff
             }
 
-    -- Pendientes: requieren tipos/instancias extra (SwitchTargets, ForeignTarget, CmmFormal/Actual, â€¦)
-    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch no soportado aun (SwitchTargets)." 
-    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall no soportado aun (ForeignTarget/[CmmFormal]/[CmmActual])."
+  
+    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch not yet supported (SwitchTargets)."
+    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall not yet supported (ForeignTarget/[CmmFormal]/[CmmActual])."
 
     other -> fail ("Unsupported CmmNode O C tag: " <> unpack other)
 --CmmSwitch 
@@ -632,7 +618,7 @@ instance
 
       other ->
         fail ("Unsupported Graph' tag: " <> unpack other)
-
+--HANDLE
 
 
 -- Block C O  (entry node + middle)
@@ -919,7 +905,7 @@ instance ToJSON CostCentreStack where
     | otherwise          = object ["tag" .= String "DontCareCCS"]
 
 
-
+--Handle
 instance FromJSON CostCentreStack where
   parseJSON v =
        parseAsText v
@@ -956,9 +942,7 @@ instance FromJSON CmmInfoTable
 --this depends on GHC.Types.Var.Var, which seems to depend on a lot of GHC stuff
 -- maybe i should not bother to serialize GHC.Types.Var.Var? 
 
--- | A single, process-stable dummy Var (a global Id with type 'Any :: Type').
-
--- | Var placeholder por defecto: un Id global 'VanillaId' con tipo () :: Type.
+--Var placeholder 
 defaultVar :: Var
 defaultVar =
   let u   = mkUniqueGrimily 0
@@ -1024,7 +1008,7 @@ instance ToJSON CCFlavour where
     , "note"    .= ("forced to CafCC to avoid IndexedCCFlavour" :: String)
     ]
 
--- Siempre deserializa a CafCC usando el constructor público expuesto
+-- Defaults serializying to CafCC using the exported smart constructor
 instance FromJSON CCFlavour where
   parseJSON _ = pure mkCafFlavour
 
@@ -1062,7 +1046,7 @@ instance ToJSON GHC.Types.SrcLoc.RealSrcSpan where
 --instance FromJSON GHC.Types.FM.RealSrcSpan where  alternate ( but worse )  way to refer to the same type 
 
 --looks like something related to source annotations, and thus not strictl necessary?
-
+--HANDLE
 
 
 
@@ -1099,13 +1083,14 @@ deriving instance Generic (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
 instance ToJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
 
-
+--https://hackage-content.haskell.org/package/ghc-9.10.3/docs/Language-Haskell-Syntax-Module-Name.html#t:ModuleName
 instance ToJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
   toJSON :: GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName -> Data.Aeson.Value
   toJSON s =
     Data.Aeson.toJSON
       (GHC.Types.Unique.DSet.uniqDSetToList s :: [GHC.Plugins.ModuleName])
 
+--https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.Unique.DSet.html#UniqDSet
 instance FromJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
   parseJSON :: Data.Aeson.Value
             -> Data.Aeson.Types.Parser (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName)
@@ -1118,9 +1103,6 @@ instance FromJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
              -> GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName
         step acc m = GHC.Types.Unique.DSet.addOneToUniqDSet acc m
     pure (Prelude.foldl step z ms)
-
---https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.Unique.DSet.html#UniqDSet
---https://hackage-content.haskell.org/package/ghc-9.10.3/docs/Language-Haskell-Syntax-Module-Name.html#t:ModuleName
     
 
 deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
@@ -1137,7 +1119,7 @@ instance FromJSON GHC.Types.FM.FastString
 instance ToJSON GHC.Types.FM.FastString
 
 
--- FromJSON/ToJSON para el FastZString de GHC (tipo abstracto)
+-- FromJSON/ToJSON for GHC's FastZString (abstract type)
 instance FromJSON FastZString where
   parseJSON = withText "FastZString" $ \t ->
     -- Text -> UTF-8 ByteString -> FastString -> (Z-encode) -> FastZString
@@ -1146,7 +1128,7 @@ instance FromJSON FastZString where
 instance ToJSON FastZString where
   toJSON fzs =
     -- zString :: FastZString -> String
-    -- lo empaquetamos como Text para emitir un JSON string
+    -- we package it as Text to output a JSON string
     String (pack (zString fzs))
 
 --End
@@ -1156,9 +1138,6 @@ instance FromJSON Data.ByteString.Short.ShortByteString
 instance ToJSON Data.ByteString.Short.ShortByteString
 
 
---instance FromJSON ByteArray where
---    parseJSON =
---        error "FromJSON Name (dummy): Name es abstracto; haremos una decodificaciÃ³n manual usando mk*Name."
 -- Encode as [Word8]
 -- Decode: [Word8] -> ByteArray
 instance FromJSON ByteArray where
@@ -1190,7 +1169,7 @@ instance ToJSON ByteArray where
 
 deriving instance Generic ProfilingInfo
 instance FromJSON ProfilingInfo
---instance ToJSON ProfilingInfo
+instance ToJSON ProfilingInfo
 
 deriving instance Generic GHC.Runtime.Heap.Layout.SMRep
 instance FromJSON GHC.Runtime.Heap.Layout.SMRep
@@ -1226,8 +1205,7 @@ instance FromJSON GlobalRegUse
 deriving instance Generic LocalReg
 instance FromJSON LocalReg
 
--- Emulacion del derivado genÃ©rico para: newtype Unique = MkUnique Word64
--- Se decodifica exactamente como Word64 y luego se construye el Unique.
+--This manual instance should have a similar behaviour as if the type had a Generic based implementation
 instance FromJSON GHC.Types.Unique.Unique where
     parseJSON v =
         (GHC.Types.Unique.mkUniqueGrimily <$> (parseJSON v :: Parser Word64))
@@ -1251,7 +1229,7 @@ data CmmCatOpen
     deriving (Show, Eq)
 
 
--- CmmType y auxiliares: ToJSON manual (complementa tu FromJSON)
+-- CmmType and auxiliaries: Manual ToJSON (complements your FromJSON)
 instance ToJSON CmmCatOpen where
   toJSON :: CmmCatOpen -> Value
   toJSON cat = case cat of
@@ -1397,7 +1375,7 @@ instance ToJSON SectionType
 
 instance ToJSON CmmLit
 instance ToJSON CmmInfoTable
-instance ToJSON ProfilingInfo
+
 instance ToJSON GHC.Runtime.Heap.Layout.SMRep
 instance ToJSON ClosureTypeInfo
 instance ToJSON GHC.Runtime.Heap.Layout.ArgDescr
