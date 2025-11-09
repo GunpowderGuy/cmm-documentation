@@ -1,0 +1,11 @@
+https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Type.html#CmmType
+
+One of the internal types of CmmType (CmmCat ) is not exported, not 
+even as an abstract data type
+
+CCFlavour instances 
+
+
+https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.CostCentre.html#CCFlavour
+
+IndexedCCFlavour is not exported at all
