@@ -110,7 +110,6 @@ import GHC.Cmm.Node (ForeignConvention(..), ForeignTarget(..) ,  CmmReturnInfo(.
 import GHC.Cmm.MachOp ( CallishMachOp(..), MemoryOrdering(..) , AtomicMachOp(..))
 
 
--- import GHC.Cmm.Reg (GlobalReg) -- register type used by CmmProc
 -- Other GHC internals
 import GHC.Types.ForeignCall ( CCallConv(..) ) 
 
@@ -123,7 +122,6 @@ import GHC.Types.CostCentre (CostCentreStack,  CostCentre(..))
 
 import GHC.Types.Unique (Unique, mkUnique, mkUniqueGrimily, mkUniqueIntGrimily,getKey)
 
--- import GHC.Runtime.Heap.Layout (SMRep)
 
 import qualified Data.Semigroup as GHC.Runtime.Heap.Layout
 import GHC.Runtime.Heap.Layout (ArgDescr (..), SMRep (..))
@@ -135,9 +133,9 @@ import GHC.Core.TyCo.Rep (Mult, Type)
 import GHC.Types.Id.Info (IdDetails, IdInfo, vanillaIdInfo)
 import GHC.Types.Name (Name)
 
-import qualified GHC.Plugins as GHC.Types.FM -- debo deprecar esto
+import qualified GHC.Plugins as GHC.Types.FM -- this should be deprecated
 import GHC.Types.Id.Info (IdDetails (..))
---import qualified GHC.Types.Unique.DFM as GHC.Types.FM
+
 
 import GHC.Tc.Utils.TcType (ConcreteTvOrigin (..))
 
@@ -163,16 +161,10 @@ import GHC.Unit.Module (Module)
 import GHC.Types.ForeignCall (CCallSpec (..), CCallTarget (..), ForeignCall (..))
 import qualified GHC.Types.ForeignCall as GHC.Types -- sus
 
--- import Data.Array.Byte (ByteArray(..))
 
--- Deja este para el TIPO ByteArray (sigue siendo el mismo tipo)
 import Data.Array.Byte (ByteArray)
 
--- QUITA las funciones que antes intentabas traer de Data.Array.Byte
---   , MutableByteArray
---   , newByteArray
---   , writeByteArray
---   , unsafeFreezeByteArray
+
 
 import GHC.Core.Class (Class (..))
 import GHC.Core.ConLike (ConLike (..))
@@ -345,7 +337,7 @@ deriving instance Generic CmmStackInfo
 instance FromJSON CmmStackInfo
 
 
--- | O â†’ O nodes: parse JSON into real constructors with arguments.
+-- | O at O nodes: parse JSON into real constructors with arguments.
 parseNodeO_O_json :: Value -> Parser (CmmNode O O)
 parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -380,7 +372,6 @@ parseNodeO_O_json = withObject "CmmNode O O" $ \o -> do
 
 
 --https://www.stackage.org/haddock/lts-24.17/ghc-9.10.3/src/GHC.Types.Tickish.html#GenTickish
---deriving instance Generic (GenTickish 'TickishPassCmmC)
 
 -- A tiny local helper: a stable fake Module for defaults
 dummyTickModule :: Module
@@ -396,16 +387,7 @@ instance ToJSON CmmTickish where
 instance FromJSON CmmTickish where
   -- Default to a harmless HPC tick in a fake module, id 0.
   parseJSON _ = pure (HpcTick dummyTickModule 0)
-
-
--- CmmTickish / ForeignTarget: FromJSON dummy
---instance ToJSON CmmTickish where
---  toJSON _ = dummyVal "CmmTickish dummy instance"
---  toJSON _ = undefined
-
---instance FromJSON CmmTickish where
---parseJSON _ = fail "FromJSON CmmTickish: dummy instance"
---  parseJSON _ = undefined 
+--HANDLE
 
 --This two seem like instances i dont have to handle  .. I seemed to have been referring to ForeignTarget and CmmTickish
 
@@ -450,13 +432,6 @@ deriving instance Generic ForeignTarget
 instance ToJSON ForeignTarget
 instance FromJSON ForeignTarget
 
---instance ToJSON ForeignTarget where
---  toJSON _ = dummyVal "ForeignTarget dummy instance"
---  toJSON _ = undefined
-
---instance FromJSON ForeignTarget where
-    --parseJSON _ = fail "FromJSON ForeignTarget: dummy instance"
---    parseJSON _ = undefined 
 
 -- needed because of instance FromJSON CmmTopInfo
 
@@ -590,7 +565,6 @@ parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
 --CmmForeignCall HANDLE THESE . Specially CmmForeignCall
 
 
--- | O â†’ C nodes
 instance FromJSON (CmmNode O C) where
   parseJSON = parseNodeO_C_json
 
@@ -624,8 +598,6 @@ instance ToJSON (CmmNode O C) where
            , "contents" .= toJSON (tgt, mcont, regs, args, retArgs, retOff)
            ]
 
-
---deriving instance Generic  ( GHC.Cmm.Dataflow.Block.Block CmmNode GHC.Cmm.Dataflow.Block.C GHC.Cmm.Dataflow.Block.C )
 
 -- Graph' Block CmmNode C C  (closed entry, closed exit)
 instance
@@ -821,8 +793,6 @@ instance FromJSON (Block CmmNode C C) where
 ---Needed for GenCmmGraph CmmNode
 
 
-
-
 instance ToJSON Label where
   toJSON     = toJSON . labelToWord64
   toEncoding = toEncoding . labelToWord64
@@ -834,7 +804,7 @@ deriving instance Generic SectionType
 instance FromJSON SectionType
 
 
--- GenCmmStatics 'False: acepta CmmStatics y CmmStaticsRaw
+-- GenCmmStatics 'False: acepts CmmStatics and CmmStaticsRaw
 instance FromJSON (GenCmmStatics 'False) where
   parseJSON = withObject "GenCmmStatics 'False" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -866,8 +836,8 @@ instance ToJSON (GenCmmStatics 'False) where
            ]
 
 
--- CmmStatic aparece en CmmStaticsRaw :: CLabel -> [CmmStatic]
--- Necesaria para que genericParseJSON de GenCmmStatics 'True compile.
+-- CmmStatic appears in CmmStaticsRaw :: CLabel -> [CmmStatic]
+--Requiered for genericParseJSON of GenCmmStatics 'True
 deriving instance Generic CmmStatic
 instance FromJSON CmmStatic
 instance ToJSON CmmStatic
@@ -889,7 +859,7 @@ instance ToJSON (GenCmmStatics 'True) where
            , "contents" .= toJSON (lbl, statics)
            ]
 
--- GenCmmStatics 'True: solo permite CmmStaticsRaw
+-- GenCmmStatics 'True: only allows CmmStaticsRaw
 instance FromJSON (GenCmmStatics 'True) where
   parseJSON = withObject "GenCmmStatics 'True" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -906,22 +876,18 @@ instance FromJSON (GenCmmStatics 'True) where
       other -> fail $ "GenCmmStatics 'True: unknown tag " <> unpack other
 
 deriving instance Generic CmmLit
-instance FromJSON CmmLit --where
---   parseJSON _ = fail "dummy"
-
--- data structures are not all in scope
+instance FromJSON CmmLit 
 
 deriving instance Generic CostCentre
---instance FromJSON CostCentre -- Check Begin and End
-instance FromJSON CostCentre --where
---  parseJSON = undefined
+
+instance FromJSON CostCentre 
+
 instance ToJSON CostCentre
 
 
 
--- ==========================
+
 -- ToJSON for CostCentreStack
--- ==========================
 {-
 instance ToJSON CostCentreStack where
   toJSON :: CostCentreStack -> Value
@@ -982,17 +948,9 @@ instance FromJSON CostCentreStack where
 
 
 
---deriving instance Generic CostCentreStack
---instance FromJSON CostCentreStack where
---    parseJSON :: Value -> Parser CostCentreStack
---    parseJSON _ = fail "dummy"
-
-
-
 deriving instance Generic CmmInfoTable
 
-instance FromJSON CmmInfoTable --where
--- parseJSON _ = fail "dummy"
+instance FromJSON CmmInfoTable 
 
 --instance FromJSON CmmInfoTable 
 --this depends on GHC.Types.Var.Var, which seems to depend on a lot of GHC stuff
@@ -1022,23 +980,13 @@ instance FromJSON Var where
   parseJSON _ = pure defaultVar
 
 deriving instance Generic GHC.Types.ForeignCall.ForeignCall
---instance FromJSON GHC.Types.ForeignCall.ForeignCall
+
 
 deriving instance Generic GHC.Types.ForeignCall.CCallSpec
 
 
---instance FromJSON GHC.Types.ForeignCall.CCallSpec where
---    parseJSON =
---        error "Falla pues"
-
 deriving instance Generic GHC.Types.ForeignCall.CCallTarget
 
-
---instance FromJSON GHC.Types.CCallTarget where
---    parseJSON =
---        error "Falla pues"
-
---Begin
 
 {-
 instance ToJSON CCFlavour where
@@ -1057,10 +1005,6 @@ instance ToJSON CCFlavour where
     other -> object ["tag" .= String (T.pack other)]
 -}
 
---deriving instance Generic GHC.Types.CostCentre.CCFlavour
---instance FromJSON GHC.Types.CostCentre.CCFlavour where
---    parseJSON =
---        error "falla pues"
 
 
 --Csaba says to alwayys use CafCC to not need Indexed CCflavour
@@ -1070,8 +1014,6 @@ instance ToJSON CCFlavour where
 --https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.CostCentre.html#mkExprCCFlavour
 
 --seems like this type is source annotations cmm can prescind from 
---instance ToJSON GHC.Types.CostCentre.CCFlavour  where
---  toJSON = undefined
 --https://hackage-content.haskell.org/package/ghc-9.10.3/docs/GHC-Types-CostCentre.html
 
 -- Followed Csabas advice
@@ -1088,17 +1030,13 @@ instance FromJSON CCFlavour where
 
 
 deriving instance Generic SrcSpan
-instance FromJSON SrcSpan --where
+instance FromJSON SrcSpan 
 instance ToJSON SrcSpan
---   parseJSON =
---       error "falla pues"
 
 
 deriving instance Generic GHC.Types.FM.UnhelpfulSpanReason
 instance FromJSON GHC.Types.FM.UnhelpfulSpanReason where
 instance ToJSON GHC.Types.FM.UnhelpfulSpanReason where
---   parseJSON =
---       error "falla pues"
 
 
 defaultRealSrcSpan :: GHC.Types.SrcLoc.RealSrcSpan
@@ -1122,41 +1060,25 @@ instance ToJSON GHC.Types.SrcLoc.RealSrcSpan where
 --https://www.stackage.org/haddock/lts-24.17/ghc-9.10.3/src/GHC.Types.SrcLoc.html#RealSrcSpan
 --deriving instance Generic GHC.Types.FM.RealSrcSpan
 --instance FromJSON GHC.Types.FM.RealSrcSpan where  alternate ( but worse )  way to refer to the same type 
---instance FromJSON GHC.Types.SrcLoc.RealSrcSpan where
---   parseJSON =
---       error "falla pues"
+
 --looks like something related to source annotations, and thus not strictl necessary?
---instance ToJSON GHC.Types.SrcLoc.RealSrcSpan where
---  toJSON = undefined
+
 
 
 
 deriving instance Generic (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan)
 instance FromJSON (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan) 
 instance ToJSON (GHC.Data.Strict.Maybe GHC.Types.FM.BufSpan) 
---  where
---    parseJSON =
---      error "falla pues"
-
-
 
 
 deriving instance Generic GHC.Types.FM.BufSpan
 instance FromJSON GHC.Types.FM.BufSpan
 instance ToJSON GHC.Types.FM.BufSpan
---  where
---    parseJSON =
---      error "falla pues"
 
 
 deriving instance Generic GHC.Types.FM.BufPos
 instance FromJSON GHC.Types.FM.BufPos
 instance ToJSON GHC.Types.FM.BufPos
-
---  where
---    parseJSON =
---      error "falla pues"
-
 
 
 deriving instance Generic (GHC.Types.FM.GenModule GHC.Types.FM.Unit)
@@ -1166,27 +1088,16 @@ instance ToJSON (GHC.Types.FM.GenModule GHC.Types.FM.Unit)
 deriving instance Generic GHC.Types.FM.ModuleName
 instance FromJSON GHC.Types.FM.ModuleName
 instance ToJSON GHC.Types.FM.ModuleName
---  where
---    parseJSON =
---        error "falla pues"
 
 
 deriving instance Generic (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
 instance ToJSON (GHC.Types.FM.GenUnit GHC.Types.FM.UnitId)
---  where
---    parseJSON =
---        error "falla pues"
 
 
 deriving instance Generic (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
 instance ToJSON (GHC.Types.FM.GenInstantiatedUnit GHC.Types.FM.UnitId)
-
---  where
---    parseJSON =
---        error "falla pues"
-
 
 
 instance ToJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
@@ -1210,21 +1121,12 @@ instance FromJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
 
 --https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.Unique.DSet.html#UniqDSet
 --https://hackage-content.haskell.org/package/ghc-9.10.3/docs/Language-Haskell-Syntax-Module-Name.html#t:ModuleName
---deriving instance Generic (GHC.Types.Unique.DSet.UniqDSet GHC.Types.FM.ModuleName)
---deriving Generic not possible
---instance FromJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
---  parseJSON = undefined
     
-
---instance ToJSON (GHC.Types.Unique.DSet.UniqDSet GHC.Plugins.ModuleName) where
---  toJSON = undefined
 
 deriving instance Generic (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 instance FromJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
 instance ToJSON (GHC.Types.FM.Definite GHC.Types.FM.UnitId)
---  where
---    parseJSON =
---        error "falla pues"
+
 
 deriving instance Generic GHC.Types.FM.UnitId
 instance FromJSON GHC.Types.FM.UnitId
@@ -1339,55 +1241,6 @@ instance ToJSON GHC.Types.Unique.Unique where
     -- Emit as Word64 to match your FromJSON that uses mkUniqueGrimily :: Word64 -> Unique
     toJSON (fromIntegral (GHC.Types.Unique.getKey u) :: Word64)
 
-
-
--- reemplaza tu main por este
-main_legacy :: IO ()
-main_legacy = do
-    putStrLn "== CmmNode C O JSON tests =="
-
-    -- 1) OK: objeto vÃ¡lido
-    let ok = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"GlobalScope\"}"
-    test "OK (object with tag/label/scope)" ok
-
-    -- 2) OK sin scope (usa GlobalScope por defecto)
-    let okNoScope = "{\"tag\":\"CmmEntry\",\"label\":1}"
-    test "OK (object without scope â†’ defaults to GlobalScope)" okNoScope
-
-    -- 3) Falla: scope no soportado
-    let badScope = "{\"tag\":\"CmmEntry\",\"label\":0,\"scope\":\"LocalScope\"}"
-    test "FAIL (unsupported scope)" badScope
-
-    -- 4) Falla: tag no soportado
-    let badTag = "{\"tag\":\"NotEntry\",\"label\":0}"
-    test "FAIL (unsupported tag)" badTag
-
-    -- 5) Falla: falta label
-    let missingLabel = "{\"tag\":\"CmmEntry\"}"
-    test "FAIL (missing label)" missingLabel
-
-    -- 6) Falla: string â€œlegacyâ€ (ya no aceptamos Text puro)
-    let legacy = "\"CmmEntry\""
-    test "FAIL (string form no longer accepted)" legacy
-
-    putStrLn "== Done =="
-  where
-    test msg js = do
-        putStrLn $ "â†’ " <> msg
-        case eitherDecode @(CmmNode C O) (LBS.pack js) of
-            Right _ -> putStrLn "   decoded: OK"
-            Left e -> putStrLn $ "   decoded: ERROR â†’ " <> e
-
--- ===== FromJSON for CmmType (emulating genericParseJSON defaultOptions) =====
--- JSON shape expected (TaggedObject):
---   { "tag":"CmmType", "contents":[ <CmmCat>, <Width> ] }
---   CmmCat:
---     { "tag":"BitsCat" }
---     { "tag":"FloatCat" }
---     { "tag":"GcPtrCat" }
---     { "tag":"VecCat", "contents":[ <Length :: Int>, <CmmCat> ] }
---   Width:
---     { "tag":"W8" | "W16" | "W32" | "W64" | "W128" | "W256" | "W512" }
 
 -- Open mirror of the internal category so we can rebuild using public ctors
 data CmmCatOpen
@@ -1534,22 +1387,6 @@ instance FromJSON CmmType where
       build OGcPtr _      = fail "CmmType: decoding GcPtrCat requires Platform (use a Platform-aware parser)"
 
 
-
-
---------------------------------------------------------------------------------
--- ToJSON instances (FINAL) — respeta tu regla automática/dummy
--- Pegar exactamente al final de Main.hs
---------------------------------------------------------------------------------
-
--- Helper para dummies
---dummyVal :: Text -> Value
---dummyVal msg = object ["_dummy" .= True, "note" .= msg]
-
---------------------------------------------------------------------------------
--- AUTOMÁTICAS: tipos con (deriving Generic ..) + (instance FromJSON ..) en TU archivo
---   → instancia vacía `instance ToJSON …` (Aeson usa Generic por default)
---------------------------------------------------------------------------------
-
 instance ToJSON (GenCmmDecl CmmStatics CmmTopInfo CmmGraph)
 instance ToJSON CmmTopInfo
 instance ToJSON (GenCmmGraph CmmNode)
@@ -1557,14 +1394,14 @@ instance ToJSON GlobalReg
 instance ToJSON Section
 instance ToJSON CmmStackInfo
 instance ToJSON SectionType
---instance ToJSON CmmStatic
+
 instance ToJSON CmmLit
 instance ToJSON CmmInfoTable
 instance ToJSON ProfilingInfo
 instance ToJSON GHC.Runtime.Heap.Layout.SMRep
 instance ToJSON ClosureTypeInfo
 instance ToJSON GHC.Runtime.Heap.Layout.ArgDescr
---instance ToJSON CmmExpr
+
 instance ToJSON MachOp
 instance ToJSON FMASign
 instance ToJSON AlignmentSpec
@@ -1573,111 +1410,6 @@ instance ToJSON CmmReg
 instance ToJSON GlobalRegUse
 instance ToJSON LocalReg
 
---------------------------------------------------------------------------------
--- DUMMY: tipos con FromJSON MANUAL en TU archivo
--- (incluye además los necesarios para resolver campos internos de las automáticas)
---------------------------------------------------------------------------------
-
--- LabelMap: tienes FromJSON manual [(Word64,a)] -> LabelMap a
---instance ToJSON a => ToJSON (LabelMap a) where
---toJSON _ = dummyVal "LabelMap dummy instance (no Label→Word64 extractor disponible)"
-
--- ByteString: FromJSON manual en tu archivo
---instance ToJSON BS.ByteString where
---  toJSON :: BS.ByteString -> Value
---  toJSON _ = dummyVal "ByteString dummy instance"
-
--- ShortByteString: declaraste FromJSON; damos ToJSON dummy
---instance ToJSON Data.ByteString.Short.ShortByteString where
---  toJSON _ = dummyVal "ShortByteString dummy instance"
-
--- CLabel: FromJSON manual
---instance ToJSON CLabel where
---  toJSON _ = dummyVal "CLabel dummy instance"
-
--- Label: FromJSON manual (Word64 -> mkHooplLabel)
---instance ToJSON Label where
- -- toJSON _ = dummyVal "Label dummy instance"
-
--- CostCentre / CostCentreStack: FromJSON manual/indefinido
---instance ToJSON CostCentre where
---  toJSON _ = dummyVal "CostCentre dummy instance"
-
---instance ToJSON CostCentreStack where
---  toJSON _ = dummyVal "CostCentreStack dummy instance"
-
--- Var: FromJSON manual (dummy)
---instance ToJSON GHC.Types.Var.Var where
---  toJSON _ = dummyVal "Var dummy instance"
-
--- CmmTickish / ForeignTarget: FromJSON dummy
---instance ToJSON CmmTickish where
---toJSON _ = dummyVal "CmmTickish dummy instance"
-
---instance ToJSON ForeignTarget where
---toJSON _ = dummyVal "ForeignTarget dummy instance"
-
--- Graph' Block CmmNode C C: FromJSON manual
---instance ToJSON (Graph' Block CmmNode C C) where
---  toJSON _ = dummyVal "Graph' Block CmmNode C C dummy instance"
-
--- Blocks: FromJSON manual (todas las variantes)
---instance ToJSON (Block CmmNode C O) where
--- toJSON _ = dummyVal "Block C O dummy instance"
-
---instance ToJSON (Block CmmNode O O) where
--- toJSON _ = dummyVal "Block O O dummy instance"
-
-
-
-
-
---instance ToJSON (Block CmmNode O C) where
---  toJSON _ = dummyVal "Block O C dummy instance"
-
---instance ToJSON (Block CmmNode C C) where
---  toJSON _ = dummyVal "Block C C dummy instance"
-
--- CmmNode: FromJSON manual (todas las variantes)
---instance ToJSON (CmmNode C O) where
---  toJSON _ = dummyVal "CmmNode C O dummy instance"
-
---instance ToJSON (CmmNode O O) where
---  toJSON _ = dummyVal "CmmNode O O dummy instance"
-
---instance ToJSON (CmmNode O C) where
---  toJSON _ = dummyVal "CmmNode O C dummy instance"
-
-
--- GenCmmStatics 'False / 'True: FromJSON manual
---instance ToJSON (GenCmmStatics 'False) where
---  toJSON :: GenCmmStatics False -> Value
---  toJSON _ = dummyVal "GenCmmStatics 'False dummy instance"
-
---instance ToJSON (GenCmmStatics 'True) where
---  toJSON _ = dummyVal "GenCmmStatics 'True dummy instance"
-
--- Label: FromJSON manual (Word64 -> mkHooplLabel)
---instance ToJSON Label where
---  toJSON _ = dummyVal "Label dummy instance"
-
--- Unique: FromJSON manual (Word64 -> mkUniqueGrimily)
---instance ToJSON GHC.Types.Unique.Unique where
---  toJSON _ = dummyVal "Unique dummy instance"
-
--- ByteArray: FromJSON manual (error/dummy)
---instance ToJSON ByteArray where
---  toJSON _ = dummyVal "ByteArray dummy instance"
-
--- CmmType y auxiliares: FromJSON manual
---instance ToJSON CmmCatOpen where
- --toJSON _ = dummyVal "CmmCatOpen dummy instance"
-
---instance ToJSON Width where
- --toJSON _ = dummyVal "Width dummy instance"
-
---instance ToJSON CmmType where
---toJSON _ = dummyVal "CmmType dummy instance"
 
 
 -- ==============================================
