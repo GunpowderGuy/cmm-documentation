@@ -176,6 +176,15 @@ import GHC.Types.SrcLoc (SrcSpan, noSrcSpan, RealSrcSpan , mkRealSrcLoc , mkReal
 import GHC.Types.Unique (Unique)
 import GHC.Unit.Module (Module)
 
+import GHC.Types.SrcLoc
+  ( SrcSpan, noSrcSpan, RealSrcSpan
+  , mkRealSrcLoc, mkRealSrcSpan
+  , realSrcSpanStart
+  , srcLocFile
+  , srcSpanStartLine, srcSpanStartCol, srcSpanEndLine, srcSpanEndCol
+  )
+
+
 import GHC.Types.ForeignCall (CCallSpec (..), CCallTarget (..), ForeignCall (..))
 import qualified GHC.Types.ForeignCall as GHC.Types -- sus
 
@@ -1071,6 +1080,8 @@ instance FromJSON GHC.Types.FM.UnhelpfulSpanReason where
 instance ToJSON GHC.Types.FM.UnhelpfulSpanReason where
 
 
+
+
 defaultRealSrcSpan :: GHC.Types.SrcLoc.RealSrcSpan
 defaultRealSrcSpan =
   let f  = GHC.Data.FastString.fsLit "<unknown>"
@@ -1078,22 +1089,67 @@ defaultRealSrcSpan =
   in  GHC.Types.SrcLoc.mkRealSrcSpan l0 l0
 
 
-instance FromJSON GHC.Types.SrcLoc.RealSrcSpan where
-  parseJSON :: Value -> Parser GHC.Types.SrcLoc.RealSrcSpan
-  parseJSON _ = pure defaultRealSrcSpan
+--instance FromJSON GHC.Types.SrcLoc.RealSrcSpan where
+--  parseJSON :: Value -> Parser GHC.Types.SrcLoc.RealSrcSpan
+--  parseJSON _ = pure defaultRealSrcSpan
 
-instance ToJSON GHC.Types.SrcLoc.RealSrcSpan where
-  toJSON :: GHC.Types.SrcLoc.RealSrcSpan -> Value
-  toJSON _ = object
-    [ "tag"    .= String "RealSrcSpan"
-    , "status" .= String "not handled"
-    , "note"   .= String "decoded as defaultRealSrcSpan"
-    ]
+
+instance Data.Aeson.FromJSON GHC.Types.SrcLoc.RealSrcSpan where
+  parseJSON =
+    Data.Aeson.withObject "RealSrcSpan" $ \o -> do
+      file  <- (o Data.Aeson.Types..: "file"  :: Data.Aeson.Types.Parser String)
+
+      start <- o Data.Aeson.Types..: "start"
+      sLoc  <- Data.Aeson.withObject "start" (\s -> do
+                  sline <- s Data.Aeson.Types..: "line"   :: Data.Aeson.Types.Parser Int
+                  scol  <- s Data.Aeson.Types..: "column" :: Data.Aeson.Types.Parser Int
+                  let f = GHC.Data.FastString.fsLit file
+                  pure (mkRealSrcLoc f sline scol)
+               ) start
+
+      end   <- o Data.Aeson.Types..: "end"
+      eLoc  <- Data.Aeson.withObject "end" (\e -> do
+                  eline <- e Data.Aeson.Types..: "line"   :: Data.Aeson.Types.Parser Int
+                  ecol  <- e Data.Aeson.Types..: "column" :: Data.Aeson.Types.Parser Int
+                  let f = GHC.Data.FastString.fsLit file
+                  pure (mkRealSrcLoc f eline ecol)
+               ) end
+
+      pure (mkRealSrcSpan sLoc eLoc)
+
+
+--instance ToJSON GHC.Types.SrcLoc.RealSrcSpan where
+--  toJSON :: GHC.Types.SrcLoc.RealSrcSpan -> Value
+--  toJSON _ = object
+--    [ "tag"    .= String "RealSrcSpan"
+--    , "status" .= String "not handled"
+--    , "note"   .= String "decoded as defaultRealSrcSpan"
+--    ]
+
+instance Data.Aeson.ToJSON GHC.Types.SrcLoc.RealSrcSpan where
+  toJSON rsp =
+    let fileStr = GHC.Data.FastString.unpackFS (GHC.Types.SrcLoc.srcLocFile (GHC.Types.SrcLoc.realSrcSpanStart rsp))
+        sLine   = GHC.Types.SrcLoc.srcSpanStartLine rsp
+        sCol    = GHC.Types.SrcLoc.srcSpanStartCol  rsp
+        eLine   = GHC.Types.SrcLoc.srcSpanEndLine   rsp
+        eCol    = GHC.Types.SrcLoc.srcSpanEndCol    rsp
+    in Data.Aeson.object
+         [ ("file"  Data.Aeson..= fileStr)
+         , ("start" Data.Aeson..= Data.Aeson.object
+             [ ("line"   Data.Aeson..= sLine)
+             , ("column" Data.Aeson..= sCol)
+             ])
+         , ("end"   Data.Aeson..= Data.Aeson.object
+             [ ("line"   Data.Aeson..= eLine)
+             , ("column" Data.Aeson..= eCol)
+             ])
+         ]
+
 --https://www.stackage.org/haddock/lts-24.17/ghc-9.10.3/src/GHC.Types.SrcLoc.html#RealSrcSpan
 --deriving instance Generic GHC.Types.FM.RealSrcSpan
 --instance FromJSON GHC.Types.FM.RealSrcSpan where  alternate ( but worse )  way to refer to the same type 
 
---looks like something related to source annotations, and thus not strictl necessary?
+--looks like something related to source annotations, and thus not strictly necessary?
 --HANDLE
 
 
