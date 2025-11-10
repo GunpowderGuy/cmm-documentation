@@ -16,6 +16,23 @@
 
 module CMM.CmmSerde where
 
+import qualified Data.Map.Strict
+
+
+import Data.Aeson.Types (Parser, (.:), (.:?))
+
+-- imports (near the other GHC.Cmm imports)
+import GHC.Cmm.Switch
+  ( SwitchTargets
+  , mkSwitchTargets
+  , switchTargetsToList
+  , switchTargetsDefault
+  , switchTargetsRange
+  , switchTargetsSigned
+  , switchTargetsCases
+  )
+
+
 
 --CmmTickish and its utility function
 import GHC.Types.Tickish  (CmmTickish, GenTickish(..))
@@ -420,7 +437,7 @@ instance FromJSON ForeignTarget
 
 
 -- needed because of instance FromJSON CmmTopInfo
-
+--https://www.stackage.org/haddock/lts-24.19/ghc-9.10.3/src/GHC.Cmm.Node.html#CmmNode
 -- C â†’ O: parse a real JSON object
 -- Accepted shape (minimum):
 --   { "tag": "CmmEntry", "label": <Word64|Label>, "scope": "GlobalScope" }
@@ -502,87 +519,118 @@ instance FromJSON (CmmNode O O) where
     parseJSON = parseNodeO_O_json
 
 
--- | O â†’ C nodes: parse JSON into real constructors with arguments.
-parseNodeO_C_json :: Value -> Parser (CmmNode O C)
-parseNodeO_C_json = withObject "CmmNode O C" $ \o -> do
-  tag <- o .: "tag" :: Parser Text
-  case tag of
-    -- { "tag":"CmmBranch", "label": <Label> }
-    "CmmBranch" -> do
-      lbl <- o .: "label" :: Parser Label
-      pure (CmmBranch lbl)
+instance Data.Aeson.ToJSON GHC.Cmm.Switch.SwitchTargets where
+  toJSON st =
+    let rangePair = GHC.Cmm.Switch.switchTargetsRange st           -- :: (Int, Int)
+        defLabel  = GHC.Cmm.Switch.switchTargetsDefault st         -- :: Maybe Label
+        signed    = GHC.Cmm.Switch.switchTargetsSigned st          -- :: Bool
+        caseList  = GHC.Cmm.Switch.switchTargetsToList st          -- :: [(Int, Label)]
+    in Data.Aeson.object
+         [ "signed"  Data.Aeson..= signed
+         , "range"   Data.Aeson..= rangePair
+         , "default" Data.Aeson..= defLabel
+         , "cases"   Data.Aeson..= caseList
+         ]
 
-    -- { "tag":"CmmCondBranch",
-    --   "contents": [ <pred :: CmmExpr>, <true :: Label>, <false :: Label>, <likely :: Maybe Bool> ] }
-    "CmmCondBranch" -> do
-      (p, t, f, lk) <- o .: "contents" :: Parser (CmmExpr, Label, Label, Prelude.Maybe Bool)
-      pure CmmCondBranch
-            { cml_pred   = p
-            , cml_true   = t
-            , cml_false  = f
-            , cml_likely = lk
-            }
+instance Data.Aeson.FromJSON GHC.Cmm.Switch.SwitchTargets where
+  parseJSON =
+    Data.Aeson.withObject "SwitchTargets" (\o -> do
+      signed    <- o .: "signed"
+      rangePair <- o .: "range"
+      defLabel  <- o .: "default"
+      caseList  <- o .: "cases"    -- type inferred automatically as [(Int, Label)]
+      Prelude.pure
+        (GHC.Cmm.Switch.mkSwitchTargets
+           signed
+           rangePair
+           defLabel
+           (Data.Map.Strict.fromList caseList)))
 
-    -- { "tag":"CmmCall",
-    --   "contents": [ <target :: CmmExpr>
-    --               , <cont   :: Maybe Label>
-    --               , <regs   :: [GlobalReg]>
-    --               , <args   :: Int>
-    --               , <retArgs:: Int>
-    --               , <retOff :: Int> ] }
-    "CmmCall" -> do
-      (tgt, mcont, regs, args, retArgs, retOff)
-        <- o .: "contents" :: Parser (CmmExpr, Prelude.Maybe Label, [GlobalReg], Int, Int, Int)
-      pure CmmCall
-            { cml_target   = tgt
-            , cml_cont     = mcont
-            , cml_args_regs= regs
-            , cml_args     = args
-            , cml_ret_args = retArgs
-            , cml_ret_off  = retOff
-            }
 
-  
-    "CmmSwitch"       -> fail "parseNodeO_C_json: CmmSwitch not yet supported (SwitchTargets)."
-    "CmmForeignCall"  -> fail "parseNodeO_C_json: CmmForeignCall not yet supported (ForeignTarget/[CmmFormal]/[CmmActual])."
 
-    other -> fail ("Unsupported CmmNode O C tag: " <> unpack other)
---CmmSwitch 
---CmmForeignCall HANDLE THESE . Specially CmmForeignCall
+
 
 
 instance FromJSON (CmmNode O C) where
-  parseJSON = parseNodeO_C_json
+  parseJSON = withObject "CmmNode O C" $ \o -> do
+    tag <- o .: "tag" :: Parser Text
+    case tag of
+      "CmmBranch" -> do
+        lbl <- o .: "label"
+        pure (CmmBranch lbl)
 
--- CmmNode O C  (last nodes)
+      "CmmCondBranch" -> do
+        (p, t, f, lk) <- o .: "contents"
+        pure CmmCondBranch
+              { cml_pred   = p
+              , cml_true   = t
+              , cml_false  = f
+              , cml_likely = lk
+              }
+
+      "CmmCall" -> do
+        (tgt0, mcont, regs, args0, retArgs, retOff) <- o .: "contents"
+        pure CmmCall
+              { cml_target    = tgt0
+              , cml_cont      = mcont
+              , cml_args_regs = regs
+              , cml_args      = args0
+              , cml_ret_args  = retArgs
+              , cml_ret_off   = retOff
+              }
+
+      "CmmSwitch" -> do
+        (scrut, tgts) <- o .: "contents"
+        pure (CmmSwitch scrut tgts)
+
+      "CmmForeignCall" -> do
+        (ft, formals, actuals, k, ra, ro, intr) <- o .: "contents"
+        -- If you didn't add `import qualified GHC.Cmm as Cmm`, then instead put:
+        --   import Prelude hiding (succ)
+        -- and keep `succ = k` below.
+        pure CmmForeignCall
+              { tgt        = ft
+              , res        = formals
+              , args       = actuals
+              , GHC.Cmm.succ   = k
+              , ret_args   = ra
+              , ret_off    = ro
+              , intrbl     = intr
+              }
+
+      other -> fail ("Unsupported CmmNode O C tag: " <> unpack other)
+
+
+
 instance ToJSON (CmmNode O C) where
-  toJSON :: CmmNode O C -> Value
-  toJSON (CmmBranch lbl) =
-    object [ "tag"   .= String "CmmBranch"
-           , "label" .= lbl
-           ]
+  toJSON n = case n of
+    CmmBranch lbl ->
+      object [ "tag" .= String "CmmBranch"
+             , "label" .= lbl
+             ]
 
-  toJSON CmmCondBranch{ cml_pred = p
-                      , cml_true = t
-                      , cml_false = f
-                      , cml_likely = lk
-                      } =
-    -- (CmmExpr, Label, Label, Maybe Bool)
-    object [ "tag" .= String "CmmCondBranch"
-           , "contents" .= toJSON (p, t, f, lk)
-           ]
+    CmmCondBranch { cml_pred = p, cml_true = t, cml_false = f, cml_likely = lk } ->
+      object [ "tag" .= String "CmmCondBranch"
+             , "contents" .= (p, t, f, lk)
+             ]
 
-  toJSON CmmCall{ cml_target   = tgt
-                , cml_cont     = mcont
-                , cml_args_regs= regs
-                , cml_args     = args
-                , cml_ret_args = retArgs
-                , cml_ret_off  = retOff
-                } =
-    -- (CmmExpr, Maybe Label, [GlobalReg], Int, Int, Int)
-    object [ "tag" .= String "CmmCall"
-           , "contents" .= toJSON (tgt, mcont, regs, args, retArgs, retOff)
-           ]
+    CmmCall { cml_target = tgt0, cml_cont = mcont, cml_args_regs = regs
+            , cml_args = args0, cml_ret_args = retArgs, cml_ret_off = retOff } ->
+      object [ "tag" .= String "CmmCall"
+             , "contents" .= (tgt0, mcont, regs, args0, retArgs, retOff)
+             ]
+
+    CmmSwitch scrut targets ->
+      object [ "tag" .= String "CmmSwitch"
+             , "contents" .= (scrut, targets)
+             ]
+
+    CmmForeignCall { tgt = ft, res = formals, args = actuals
+                   , GHC.Cmm.succ = k, ret_args = ra, ret_off = ro, intrbl = intr } ->
+      object [ "tag" .= String "CmmForeignCall"
+             , "contents" .= (ft, formals, actuals, k, ra, ro, intr)
+             ]
+
 
 
 -- Graph' Block CmmNode C C  (closed entry, closed exit)
