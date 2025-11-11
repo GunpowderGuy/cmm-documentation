@@ -640,8 +640,7 @@ instance ToJSON (CmmNode O C) where
              , "contents" .= (ft, formals, actuals, k, ra, ro, intr)
              ]
 
-
-
+--https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Dataflow.Graph.html#Graph%27
 -- Graph' Block CmmNode C C  (closed entry, closed exit)
 instance
   FromJSON
@@ -676,6 +675,59 @@ instance
       other ->
         fail ("Unsupported Graph' tag: " <> unpack other)
 --HANDLE
+
+-- ==============================================
+-- ToJSON for Graph' Block CmmNode C C (closed/closed)
+-- Mirrors the manual FromJSON that accepts only:
+--   { "tag":"GMany"
+--   , "contents": [ <_entry :: Block O C>         -- ignored by parser
+--                 , <body   :: LabelMap (Block C C)>
+--                 , <_exit  :: Block C O> ] }     -- ignored by parser
+-- ==============================================
+instance ToJSON (Graph' Block CmmNode C C) where
+  toJSON :: Graph' Block CmmNode C C -> Value
+  toJSON (GMany _ bodyCC _) =
+    object
+      [ "tag"      .= String "GMany"
+      , "contents" .= toJSON (dummyEntryOC, encodeBody bodyCC, dummyExitCO)
+      ]
+    where
+      -- The FromJSON *parses* entry/exit but then discards them for C/C graphs.
+      -- We therefore emit minimal, well-formed placeholders that your existing
+      -- Block/CmmNode decoders will accept.
+
+      -- Block O C  ≈  { "tag":"BLast", "contents": <CmmNode O C> }
+      -- CmmNode O C ≈ { "tag":"CmmBranch", "label": <Word64> }
+      dummyEntryOC :: Value
+      dummyEntryOC =
+        object
+          [ "tag"      .= String "BLast"
+          , "contents" .= object
+              [ "tag"   .= String "CmmBranch"
+              , "label" .= (0 :: Word64)
+              ]
+          ]
+
+      -- Block C O  ≈  { "tag":"BFirst", "contents": <CmmNode C O> }
+      -- CmmNode C O ≈ { "tag":"CmmEntry", "label": <Word64>, "scope":"GlobalScope" }
+      dummyExitCO :: Value
+      dummyExitCO =
+        object
+          [ "tag"      .= String "BFirst"
+          , "contents" .= object
+              [ "tag"   .= String "CmmEntry"
+              , "label" .= (0 :: Word64)
+              , "scope" .= String "GlobalScope"
+              ]
+          ]
+
+      -- Your FromJSON for LabelMap expects a JSON list of pairs [(Word64, a)].
+      -- We don’t currently have a Label -> Word64 projector, so we serialize an
+      -- empty body (information-losing but valid). When you expose a projector
+      -- (e.g., labelUnique :: Label -> Word64) and a mapToList, replace this.
+      encodeBody :: LabelMap (Block CmmNode C C) -> Value
+      encodeBody _ = toJSON ([] :: [(Word64, Value)])
+
 
 
 -- Block C O  (entry node + middle)
@@ -1491,62 +1543,6 @@ instance ToJSON Area
 instance ToJSON CmmReg
 instance ToJSON GlobalRegUse
 instance ToJSON LocalReg
-
-
-
--- ==============================================
--- ToJSON for Graph' Block CmmNode C C (closed/closed)
--- Mirrors the manual FromJSON that accepts only:
---   { "tag":"GMany"
---   , "contents": [ <_entry :: Block O C>         -- ignored by parser
---                 , <body   :: LabelMap (Block C C)>
---                 , <_exit  :: Block C O> ] }     -- ignored by parser
--- ==============================================
-instance ToJSON (Graph' Block CmmNode C C) where
-  toJSON :: Graph' Block CmmNode C C -> Value
-  toJSON (GMany _ bodyCC _) =
-    object
-      [ "tag"      .= String "GMany"
-      , "contents" .= toJSON (dummyEntryOC, encodeBody bodyCC, dummyExitCO)
-      ]
-    where
-      -- The FromJSON *parses* entry/exit but then discards them for C/C graphs.
-      -- We therefore emit minimal, well-formed placeholders that your existing
-      -- Block/CmmNode decoders will accept.
-
-      -- Block O C  ≈  { "tag":"BLast", "contents": <CmmNode O C> }
-      -- CmmNode O C ≈ { "tag":"CmmBranch", "label": <Word64> }
-      dummyEntryOC :: Value
-      dummyEntryOC =
-        object
-          [ "tag"      .= String "BLast"
-          , "contents" .= object
-              [ "tag"   .= String "CmmBranch"
-              , "label" .= (0 :: Word64)
-              ]
-          ]
-
-      -- Block C O  ≈  { "tag":"BFirst", "contents": <CmmNode C O> }
-      -- CmmNode C O ≈ { "tag":"CmmEntry", "label": <Word64>, "scope":"GlobalScope" }
-      dummyExitCO :: Value
-      dummyExitCO =
-        object
-          [ "tag"      .= String "BFirst"
-          , "contents" .= object
-              [ "tag"   .= String "CmmEntry"
-              , "label" .= (0 :: Word64)
-              , "scope" .= String "GlobalScope"
-              ]
-          ]
-
-      -- Your FromJSON for LabelMap expects a JSON list of pairs [(Word64, a)].
-      -- We don’t currently have a Label -> Word64 projector, so we serialize an
-      -- empty body (information-losing but valid). When you expose a projector
-      -- (e.g., labelUnique :: Label -> Word64) and a mapToList, replace this.
-      encodeBody :: LabelMap (Block CmmNode C C) -> Value
-      encodeBody _ = toJSON ([] :: [(Word64, Value)])
-
-
 
 -- | Simple test function to verify the module is linked correctly.
 serdeTest :: Bool
