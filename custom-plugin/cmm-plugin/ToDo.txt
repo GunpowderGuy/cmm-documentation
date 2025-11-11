@@ -1,48 +1,53 @@
--https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Type.html#CmmType
+-CmmType
 
-One of the internal types of CmmType (CmmCat ) is not exported, not 
+https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Type.html#CmmType
+
+One of the internal types of CmmType (CmmCat) is not exported, not
 even as an abstract data type
 
--CCFlavour instances 
+-CCFlavour instances
 
 https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.CostCentre.html#CCFlavour
 
 IndexedCCFlavour is not exported at all
 
--CmmTickish doesnt export an internal type, needed for losless encoding/decoding
+-CmmTickish doesn’t export an internal type, needed for lossless encoding/decoding
 
--https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Dataflow.Graph.html#Graph%27
+
+-The following type 
+
+https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Dataflow.Graph.html#Graph%27
+
 FromJSON / ToJSON
-    ( GHC.Cmm.Dataflow.Graph.Graph'
-        GHC.Cmm.Dataflow.Block.Block
-        CmmNode
-        GHC.Cmm.Dataflow.Block.C
-        GHC.Cmm.Dataflow.Block.C
-    )
+( GHC.Cmm.Dataflow.Graph.Graph'
+GHC.Cmm.Dataflow.Block.Block
+CmmNode
+GHC.Cmm.Dataflow.Block.C
+GHC.Cmm.Dataflow.Block.C
+)
+
 Got confused with the GADT nature of the type. Should be easy to finish the instances now
 
 -Var
 
-Var is a very complex type. It does import its contructors, so initially i tried to implement it in using Generic. 
-But its so complex and has so many non Cmm dependencies that i realized something was amiss. Acording to Csaba, Var is used 
-all over GHC. Only a subset of Var is relevant to Cmm. Which means i should make an educated guess over which subset to 
-handle then test whether its the right one. This testing will be possible when some other blockers are cleared ( like CLabel ) 
-
+Var is a very complex type. It does export its constructors, so initially I tried to implement it using Generic.
+But it’s so complex and has so many non-Cmm dependencies that I realized something was amiss. According to Csaba, Var is used
+all over GHC. Only a subset of Var is relevant to Cmm, which means I should make an educated guess over which subset to
+handle then test whether it’s the right one. This testing will be possible when some other blockers are cleared (like CLabel).
 
 -CostCentreStack
 
 One variant depends on CostCentre, which depends on CCFlavour. The problem with that type is listed above
 
--Clabel 
+-CLabel
 
-Not enough accesor or constructor fuctions to allow encoding and decoding 
+Not enough accessor or constructor functions to allow encoding and decoding
 
+As mentioned previously, some of the types can’t be encoded/decoded to JSON because GHC hides said types.
+To elaborate, many types in GHC are exported in a restricted way (these are called abstract data types). For these,
+you are at the mercy of using manually written functions to access internal values for GHC types, and form said types
+from their internal values. This makes writing JSON encoding/decoding harder, but also, if a type doesn’t have
+enough accessor or construction functions, then it’s impossible to fully encode or decode them.
 
-As mentioned previously. Some of the types cant be encode/decoded to json. Because GHC hides said types. 
-To elaborate , many types in GHC are exported in a restricted way ( these are called abstract data types ). For these,
-You are at the mercy of using manually written functions, to access internal values for GHC types, and form said types
-from their internal values. This makes writing json encoding/decoding harder, but also , if a type doesnt have 
-enough accessor or construction functions, then its impossible to fully encode or decode them.
-
-To enable a full implementation . I plan to modify GHC and expose the automatic data constructors for the types that absolutely need it. 
-After figuring this out , will then merge this changes into GHC. This will allow the plugin to be used with mainline compiler
+To enable a full implementation, I plan to modify GHC and expose the automatic data constructors for the types that absolutely need it.
+After figuring this out, will then merge these changes into GHC. This will allow the plugin to be used with the mainline compiler.
