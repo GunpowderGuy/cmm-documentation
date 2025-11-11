@@ -1,15 +1,37 @@
-https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Type.html#CmmType
+-https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Type.html#CmmType
 
 One of the internal types of CmmType (CmmCat ) is not exported, not 
 even as an abstract data type
 
-CCFlavour instances 
-
+-CCFlavour instances 
 
 https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Types.CostCentre.html#CCFlavour
 
 IndexedCCFlavour is not exported at all
 
+-CmmTickish doesnt export an internal type, needed for losless encoding/decoding
+
+-https://hackage-content.haskell.org/package/ghc-9.10.3/docs/src/GHC.Cmm.Dataflow.Graph.html#Graph%27
+FromJSON / ToJSON
+    ( GHC.Cmm.Dataflow.Graph.Graph'
+        GHC.Cmm.Dataflow.Block.Block
+        CmmNode
+        GHC.Cmm.Dataflow.Block.C
+        GHC.Cmm.Dataflow.Block.C
+    )
+Got confused with the GADT nature of the type. Should be easy to finish the instances now
+
+-Var
+
+Var is a very complex type. It does import its contructors, so initially i tried to implement it in using Generic. 
+But its so complex and has so many non Cmm dependencies that i realized something was amiss. Acording to Csaba, Var is used 
+all over GHC. Only a subset of Var is relevant to Cmm. Which means i should make an educated guess over which subset to 
+handle then test whether its the right one. This testing will be possible when some other blockers are cleared ( like CLabel ) 
+
+
+-Clabel 
+
+Not enough accesor or constructor fuctions to allow encoding and decoding 
 
 
 As mentioned previously. Some of the types cant be encode/decoded to json. Because GHC hides said types. 
