@@ -465,7 +465,7 @@ parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
             pure (CmmEntry lbl scope)
         other ->
             fail ("Unsupported CmmNode C O tag: " <> unpack other)
-
+-- CmmEntry should the only Closed Open node
 
 -- CmmNode C O  (entry node)
 instance ToJSON (CmmNode C O) where
