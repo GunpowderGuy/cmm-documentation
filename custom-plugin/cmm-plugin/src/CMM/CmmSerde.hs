@@ -123,7 +123,7 @@ import GHC.Cmm.CLabel (CLabel, ForeignLabelSource (..), mkForeignLabel) -- label
 import GHC.Cmm.Dataflow.Block
 import GHC.Cmm.Dataflow.Graph
 import GHC.Cmm.Dataflow.Label
-import GHC.Cmm.Node (ForeignConvention(..), ForeignTarget(..) ,  CmmReturnInfo(..) )
+import GHC.Cmm.Node (ForeignConvention(..), ForeignTarget(..) ,  CmmReturnInfo(..) ,CmmTickScope(..) )
 import GHC.Cmm.MachOp ( CallishMachOp(..), MemoryOrdering(..) , AtomicMachOp(..))
 
 
@@ -445,36 +445,36 @@ instance ToJSON ForeignTarget
 instance FromJSON ForeignTarget
 
 
+deriving instance Generic CmmTickScope
+instance ToJSON CmmTickScope
+instance FromJSON CmmTickScope
+
+
 -- needed because of instance FromJSON CmmTopInfo
 --https://www.stackage.org/haddock/lts-24.19/ghc-9.10.3/src/GHC.Cmm.Node.html#CmmNode
--- C â†’ O: parse a real JSON object
--- Accepted shape (minimum):
---   { "tag": "CmmEntry", "label": <Word64|Label>, "scope": "GlobalScope" }
--- - "scope" is optional; for now only "GlobalScope" is supported.
+
+
 parseNodeC_O_json :: Value -> Parser (CmmNode C O)
 parseNodeC_O_json = withObject "CmmNode C O" $ \o -> do
-    tag <- o .: "tag" :: Parser Text
-    case tag of
-        "CmmEntry" -> do
-            lbl <- o .: "label" :: Parser Label
-            mscope <- o .:? "scope" :: Parser (Prelude.Maybe Text)
-            scope <- case mscope of
-                Prelude.Nothing -> pure GlobalScope
-                Prelude.Just "GlobalScope" -> pure GlobalScope
-                Prelude.Just other -> fail ("Unsupported CmmTickScope: " <> unpack other)
-            pure (CmmEntry lbl scope)
-        other ->
-            fail ("Unsupported CmmNode C O tag: " <> unpack other)
--- CmmEntry should the only Closed Open node
+  tag <- o .: "tag" :: Parser Text
+  case tag of
+    "CmmEntry" -> do
+      lbl    <- o .:  "label" :: Parser Label
+      mscope <- o .:? "scope" :: Parser (Prelude.Maybe CmmTickScope)
+      let scope = case mscope of
+            Prelude.Nothing  -> GlobalScope
+            Prelude.Just sc  -> sc
+      pure (CmmEntry lbl scope)
+    other ->
+      fail ("Unsupported CmmNode C O tag: " <> unpack other)
 
 -- CmmNode C O  (entry node)
 instance ToJSON (CmmNode C O) where
   toJSON :: CmmNode C O -> Value
-  toJSON (CmmEntry lbl _scope) =
-    -- Your FromJSON only accepts "GlobalScope", so we encode that.
-    object [ "tag"    .= String "CmmEntry"
-           , "label"  .= lbl
-           , "scope"  .= String "GlobalScope"
+  toJSON (CmmEntry lbl scope) =
+    object [ "tag"   .= String "CmmEntry"
+           , "label" .= lbl
+           , "scope" .= scope
            ]
 
 
