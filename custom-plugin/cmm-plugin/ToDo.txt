@@ -29,6 +29,10 @@ all over GHC. Only a subset of Var is relevant to Cmm. Which means i should make
 handle then test whether its the right one. This testing will be possible when some other blockers are cleared ( like CLabel ) 
 
 
+-CostCentreStack
+
+One variant depends on CostCentre, which depends on CCFlavour. The problem with that type is listed above
+
 -Clabel 
 
 Not enough accesor or constructor fuctions to allow encoding and decoding 
