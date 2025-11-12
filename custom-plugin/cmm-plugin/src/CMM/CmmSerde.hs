@@ -8,8 +8,7 @@
 -- For testing
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
--- for manual generic implementation
---{-# LANGUAGE TypeOperators #-}
+
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -264,13 +263,11 @@ instance ToJSON CLabel where
       -- There is no direct pattern access to ForeignLabel,
       -- but GHC.Cmm.CLabel exposes query functions that tell you if it's one.
       -- If your build of GHC exports `foreignLabelSrc` etc., use those instead.
-      --
-      -- Here we emulate that by falling back to Nothing for non-ForeignLabel.
 
       maybeForeignLabel
         :: CLabel -> Prelude.Maybe (FastString, Prelude.Maybe Int, ForeignLabelSource, FunctionOrData)
       maybeForeignLabel _ = Prelude.Nothing
-      -- Replace with real extractor if available (pattern or accessor).
+   
 
       encodeFLSrc :: ForeignLabelSource -> Value
       encodeFLSrc src = case src of
@@ -478,7 +475,6 @@ instance ToJSON (CmmNode C O) where
            ]
 
 
--- | C â†’ O nodes
 instance FromJSON (CmmNode C O) where
     parseJSON = parseNodeC_O_json
 
@@ -523,7 +519,7 @@ instance ToJSON (CmmNode O O) where
            ]
 
 
--- | O â†’ O nodes
+
 instance FromJSON (CmmNode O O) where
     parseJSON = parseNodeO_O_json
 
@@ -547,7 +543,7 @@ instance Data.Aeson.FromJSON GHC.Cmm.Switch.SwitchTargets where
       signed    <- o .: "signed"
       rangePair <- o .: "range"
       defLabel  <- o .: "default"
-      caseList  <- o .: "cases"    -- type inferred automatically as [(Int, Label)]
+      caseList  <- o .: "cases"    
       Prelude.pure
         (GHC.Cmm.Switch.mkSwitchTargets
            signed
@@ -594,9 +590,7 @@ instance FromJSON (CmmNode O C) where
 
       "CmmForeignCall" -> do
         (ft, formals, actuals, k, ra, ro, intr) <- o .: "contents"
-        -- If you didn't add `import qualified GHC.Cmm as Cmm`, then instead put:
-        --   import Prelude hiding (succ)
-        -- and keep `succ = k` below.
+
         pure CmmForeignCall
               { tgt        = ft
               , res        = formals
@@ -654,11 +648,7 @@ instance
   parseJSON = withObject "Graph' Block CmmNode C C" $ \o -> do
     tag <- o .: "tag" :: Parser Text
     case tag of
-      -- Accept the legacy 3-tuple but ignore entry/exit blocks for C/C graphs.
-      -- { "tag":"GMany"
-      -- , "contents": [ <_entry :: Block O C>            -- ignored
-      --               , <body   :: LabelMap (Block C C)>  -- used
-      --               , <_exit  :: Block C O> ] }         -- ignored
+
       "GMany" -> do
         (_entryOC, bodyCC, _exitCO)
           <- o .: "contents"
@@ -667,23 +657,14 @@ instance
                   , LabelMap (Block CmmNode C C)
                   , Block CmmNode C O
                   )
-        -- Closed/Closed graphs carry no explicit entry/exit blocks:
-        -- entry  :: MaybeO C (Block O C)  = NothingO
-        -- exit   :: MaybeO C (Block C O)  = NothingC
+ 
         pure (GMany NothingO bodyCC NothingO)
 
       other ->
         fail ("Unsupported Graph' tag: " <> unpack other)
 --HANDLE
 
--- ==============================================
--- ToJSON for Graph' Block CmmNode C C (closed/closed)
--- Mirrors the manual FromJSON that accepts only:
---   { "tag":"GMany"
---   , "contents": [ <_entry :: Block O C>         -- ignored by parser
---                 , <body   :: LabelMap (Block C C)>
---                 , <_exit  :: Block C O> ] }     -- ignored by parser
--- ==============================================
+
 instance ToJSON (Graph' Block CmmNode C C) where
   toJSON :: Graph' Block CmmNode C C -> Value
   toJSON (GMany _ bodyCC _) =
@@ -692,12 +673,7 @@ instance ToJSON (Graph' Block CmmNode C C) where
       , "contents" .= toJSON (dummyEntryOC, encodeBody bodyCC, dummyExitCO)
       ]
     where
-      -- The FromJSON *parses* entry/exit but then discards them for C/C graphs.
-      -- We therefore emit minimal, well-formed placeholders that your existing
-      -- Block/CmmNode decoders will accept.
-
-      -- Block O C  ≈  { "tag":"BLast", "contents": <CmmNode O C> }
-      -- CmmNode O C ≈ { "tag":"CmmBranch", "label": <Word64> }
+    
       dummyEntryOC :: Value
       dummyEntryOC =
         object
@@ -708,8 +684,7 @@ instance ToJSON (Graph' Block CmmNode C C) where
               ]
           ]
 
-      -- Block C O  ≈  { "tag":"BFirst", "contents": <CmmNode C O> }
-      -- CmmNode C O ≈ { "tag":"CmmEntry", "label": <Word64>, "scope":"GlobalScope" }
+  
       dummyExitCO :: Value
       dummyExitCO =
         object
@@ -721,10 +696,6 @@ instance ToJSON (Graph' Block CmmNode C C) where
               ]
           ]
 
-      -- Your FromJSON for LabelMap expects a JSON list of pairs [(Word64, a)].
-      -- We don’t currently have a Label -> Word64 projector, so we serialize an
-      -- empty body (information-losing but valid). When you expose a projector
-      -- (e.g., labelUnique :: Label -> Word64) and a mapToList, replace this.
       encodeBody :: LabelMap (Block CmmNode C C) -> Value
       encodeBody _ = toJSON ([] :: [(Word64, Value)])
 
@@ -839,7 +810,7 @@ instance FromJSON (Block CmmNode O C) where
       -- { "tag":"BCat", "contents": [ <Block O O>, <Block O C> ] }
       "BCat" -> do
         (b1, b2) <- o .: "contents" :: Parser (Block CmmNode O O, Block CmmNode O C)
-        pure (blockAppend b1 b2)    -- OO + OC â†’ OC
+        pure (blockAppend b1 b2)    
 
       other -> fail ("Unsupported Block O C tag: " <> unpack other)
 
@@ -899,7 +870,7 @@ deriving instance Generic SectionType
 instance FromJSON SectionType
 
 
--- GenCmmStatics 'False: acepts CmmStatics and CmmStaticsRaw
+-- GenCmmStatics 'False: check what it allows
 instance FromJSON (GenCmmStatics 'False) where
   parseJSON = withObject "GenCmmStatics 'False" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -932,7 +903,7 @@ instance ToJSON (GenCmmStatics 'False) where
 
 
 -- CmmStatic appears in CmmStaticsRaw :: CLabel -> [CmmStatic]
---Requiered for genericParseJSON of GenCmmStatics 'True
+--Requiered for implementation of GenCmmStatics 'True
 deriving instance Generic CmmStatic
 instance FromJSON CmmStatic
 instance ToJSON CmmStatic
@@ -954,7 +925,7 @@ instance ToJSON (GenCmmStatics 'True) where
            , "contents" .= toJSON (lbl, statics)
            ]
 
--- GenCmmStatics 'True: only allows CmmStaticsRaw
+-- GenCmmStatics 'True: check what it allows
 instance FromJSON (GenCmmStatics 'True) where
   parseJSON = withObject "GenCmmStatics 'True" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -1467,7 +1438,6 @@ instance FromJSON Width where
 -- Your open mirror (already in your file)
 -- data CmmCatOpen = OGcPtr | OBits | OFloat | OVec Int CmmCatOpen
 
--- ===== ToJSON =====
 instance ToJSON CmmType where
   toJSON :: CmmType -> Value
   toJSON ty
@@ -1493,7 +1463,7 @@ instance ToJSON CmmType where
                ]
     where
       -- Encode only the *category* for an element type; its width comes
-      -- from the outer 'typeWidth ty' (same convention as your FromJSON).
+      -- from the outer 'typeWidth ty'
       toOpen :: CmmType -> CmmCatOpen
       toOpen et
         | isVecType et   = OVec (vecLength et) (toOpen (vecElemType et))
@@ -1501,7 +1471,7 @@ instance ToJSON CmmType where
         | isGcPtrType et = OGcPtr
         | otherwise      = OBits
 
--- ===== FromJSON =====
+
 instance FromJSON CmmType where
   parseJSON = withObject "CmmType" $ \o -> do
     tag <- o .: "tag" :: Parser Text
@@ -1517,7 +1487,7 @@ instance FromJSON CmmType where
       build (OVec n c) w  = vec n <$> build c w
       -- NOTE: Cmm GC-pointer requires a Platform (gcWord :: Platform -> CmmType).
       -- If you have a Platform at hand, replace this failure with:
-      --   pure (setCmmTypeWidth w (gcWord platform))
+      --   pure (setCmmTypeWidth w (gcWord platform)) Sus
       build OGcPtr _      = fail "CmmType: decoding GcPtrCat requires Platform (use a Platform-aware parser)"
 
 
@@ -1544,6 +1514,6 @@ instance ToJSON CmmReg
 instance ToJSON GlobalRegUse
 instance ToJSON LocalReg
 
--- | Simple test function to verify the module is linked correctly.
+-- simple test function to verify the module is linked correctly.
 serdeTest :: Bool
 serdeTest = True
